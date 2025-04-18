@@ -1,6 +1,10 @@
-// Prevents additional console window on Windows in release, DO NOT REMOVE!!
+// Prevents an additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-
+mod rocm;
 fn main() {
-  app_lib::run();
+    tauri::Builder::default().invoke_handler(tauri::generate_handler![
+        rocm::check_rocm_smi,
+    ])
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
 }
