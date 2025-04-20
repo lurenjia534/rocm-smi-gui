@@ -1,4 +1,4 @@
-use app_lib::rocm::{classify_gpu, query_snapshot, GpuKind, RocmDevice}; // 包名若是 app 改成 app::
+use app_lib::rocm::{classify_gpu, full_snapshot, GpuKind, RocmDevice}; // 包名若是 app 改成 app::
 
 /// 单元测试离线 JSON 解析 & 分类
 #[test]
@@ -26,6 +26,6 @@ fn parse_offline_sample() {
 #[tokio::test(flavor = "current_thread")]
 #[ignore] // 取消此行即可在有 ROCm 环境时运行
 async fn live_snapshot_has_devices() {
-    let gpus = query_snapshot().await.expect("query_snapshot 失败");
+    let gpus = full_snapshot().await.expect("query_snapshot 失败");
     assert!(!gpus.is_empty(), "未检测到任何 GPU");
 }
