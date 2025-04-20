@@ -1,5 +1,6 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::{path::PathBuf, process::Stdio, str::FromStr};
+use serde_json::Value;
 use tokio::process::Command;
 use which::which;
 
@@ -28,9 +29,13 @@ where
     D: Deserializer<'de>,
 {
     let v: Option<serde_json::Value> = Option::deserialize(d)?;
+    use serde_json::Value::*;
     Ok(match v {
-        Some(serde_json::Value::Number(n)) => n.as_u64().map(|x| x as u32),
-        Some(serde_json::Value::String(s)) => u32::from_str(&s).ok(),
+        Some(Number(n)) => n.as_u64().map(|x| x as u32),
+        Some(String(s)) => {
+            let s = s.trim_matches(|c| c == '(' || c == ')' || c == 'M' || c == 'm' || c == 'h' || c == 'z');
+            u32::from_str(&s).ok()
+        }
         _ => None,
     })
 }
@@ -74,18 +79,35 @@ pub struct RocmDevice {
     )]
     pub temp_mem: Option<f64>,
 
+    /* 频率 (新增) */
+    #[serde(rename = "sclk clock speed:", deserialize_with = "de_u32", default)]
+    pub sclk_mhz:  Option<u32>,
+    #[serde(rename = "mclk clock speed:", deserialize_with = "de_u32", default)]
+    pub mclk_mhz:  Option<u32>,
+
+    /* 显存总量 / 已用 (新增，单位 MB)  (新增) */
+    #[serde(default)] pub vram_total_mb: Option<u32>,
+    #[serde(default)] pub vram_used_mb:  Option<u32>,
+
     /* 风扇 */
     #[serde(rename = "Fan RPM", deserialize_with = "de_u32", default)]
     pub fan_rpm: Option<u32>,
 
     /* 功耗 */
     #[serde(
+        rename = "Max Graphics Package Power (W)",
+        deserialize_with = "de_f64",
+        default
+    )]
+    pub power_cap: Option<f64>, /* 新增：Max Graphics Package Power */
+
+    #[serde(
         rename = "Average Graphics Package Power (W)",
         deserialize_with = "de_f64",
         default
     )]
     pub power_avg: Option<f64>,
-
+    
     /* 利用率 */
     #[serde(rename = "GPU use (%)", deserialize_with = "de_u32", default)]
     pub gpu_util: Option<u32>,
@@ -157,26 +179,50 @@ async fn query_rocm_version(path: &PathBuf) -> anyhow::Result<RocmVersion> {
     Ok(serde_json::from_slice::<RocmVersion>(&output.stdout)?)
 }
 
-pub async fn query_snapshot() -> anyhow::Result<Vec<RocmDevice>> {
-    let output = Command::new("rocm-smi")
-        .args(["-a", "--json"])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .output()
-        .await?;
+pub async fn full_snapshot() -> anyhow::Result<Vec<RocmDevice>> {
+    use tokio::try_join;
+    let (base, clocks, mem, pcap) = try_join!(
+    Command::new("rocm-smi").args(["-a", "--json"]).output(),
+    Command::new("rocm-smi").args(["--showgpuclocks","--showclocks","--json"]).output(),
+    Command::new("rocm-smi").args(["--showmeminfo","vram","--json"]).output(),
+    Command::new("rocm-smi").args(["--showmaxpower","--json"]).output()
+  )?;
 
-    // 顶层是 {"card0": {...}, "card1": {...}, "system": {...}}
-    let snap: RocmSnapshot = serde_json::from_slice(&output.stdout)?;
-    let mut gpus = Vec::new();
+    // 基线反序列化
+    let mut root: serde_json::Map<String, serde_json::Value> =
+        serde_json::from_slice(&base.stdout)?;
 
-    for (k, v) in snap.cards {
-        if k.starts_with("card") {
-            let mut dev: RocmDevice = serde_json::from_value(v)?;
-            dev.kind = Some(classify_gpu(&dev));
-            gpus.push(dev);
+    // 把额外三段 JSON 依次 merge 到 root
+    for extra in [&clocks.stdout, &mem.stdout, &pcap.stdout] {
+        let map: serde_json::Map<String, serde_json::Value> = serde_json::from_slice(extra)?;
+        for (k, v) in map {
+            if let (Some(Value::Object(tgt)), Value::Object(src)) = (root.get_mut(&k), v) {
+                tgt.extend(src);
+            }
         }
     }
-    Ok(gpus)
+
+    // 转 RocmDevice + 额外计算
+    let mut out = Vec::new();
+    for (k, v) in root {
+        if !k.starts_with("card") { continue; }
+        let mut d: RocmDevice = serde_json::from_value(v.clone())?;
+
+        // 显存 bytes → MB
+        if let Some(total_b) = v["VRAM Total Memory (B)"].as_str().and_then(|s| s.parse::<u64>().ok()) {
+            d.vram_total_mb = Some((total_b / 1_048_576) as u32);
+        }
+        if let Some(used_b) = v["VRAM Total Used Memory (B)"].as_str().and_then(|s| s.parse::<u64>().ok()) {
+            d.vram_used_mb = Some((used_b / 1_048_576) as u32);
+        }
+
+        // 最大功耗
+        d.power_cap = v["Max Graphics Package Power (W)"].as_str().and_then(|s| s.parse::<f64>().ok());
+
+        d.kind = Some(classify_gpu(&d));
+        out.push(d);
+    }
+    Ok(out)
 }
 
 /// tauri 命令：返回路径和版本信息
