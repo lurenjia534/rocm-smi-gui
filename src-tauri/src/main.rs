@@ -1,7 +1,7 @@
 // Prevents an additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod rocm;
-use crate::rocm::{check_rocm_smi, query_snapshot};
+use crate::rocm::{check_rocm_smi, full_snapshot};
 use tauri::Emitter;
 fn main() {
     tauri::Builder::default()
@@ -10,7 +10,7 @@ fn main() {
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 loop {
-                    if let Ok(gpus) = query_snapshot().await {
+                    if let Ok(gpus) = full_snapshot().await {
                         let _ = handle.emit("gpu-update", &gpus);
                     }
                     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
