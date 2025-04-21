@@ -2,6 +2,7 @@
 
 // GPU Dashboard Sidebar – simplified (light‑theme only)
 // Removed ThemeContext, dark‑mode conditionals, and theme toggle button.
+// Added enhanced NavItem hover effects as requested.
 
 import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
@@ -59,15 +60,15 @@ export default function Sidebar() {
         { name: "关于", href: "/about", icon: <Info size={20} />, group: "Info" }
     ];
 
-    // memoized active index for indicator
+    // memoized active index for indicator (not strictly needed for visuals here but kept for context)
     const activeIndex = useMemo(
         () => navItems.findIndex((n) => pathname === n.href || pathname.startsWith(n.href)),
-        [pathname]
+        [pathname, navItems] // Added navItems dependency
     );
 
     const grouped = useMemo(
         () => ({ Metrics: navItems.filter((n) => n.group === "Metrics"), Info: navItems.filter((n) => n.group === "Info") }),
-        []
+        [navItems] // Added navItems dependency
     );
 
     // ---------------------------------------------------------------------------
@@ -91,30 +92,49 @@ export default function Sidebar() {
     function NavItem({ meta }: { meta: NavItemMeta }) {
         const active = pathname === meta.href || pathname.startsWith(meta.href);
         return (
-            <motion.div variants={itemVariants}>
+            // 1. Added whileHover to the outer motion.div
+            <motion.div
+                variants={itemVariants}
+                whileHover={{ scale: 1.02 }} // Apply slight scale-up on hover to the whole item
+            >
                 <Link
                     href={meta.href}
-                    className={`group/item relative flex h-12 items-center gap-4 rounded-xl px-6 py-3.5 transition-all duration-400 ease-[cubic-bezier(0.34,1.56,0.64,1)] select-none ${
-                        active
-                            ? "bg-gradient-to-r from-gray-200/80 via-gray-100/60 to-gray-200/40 text-gray-900"
-                            : "text-gray-600 hover:text-gray-900"
-                    }`}
+                    // 2. Updated className for enhanced hover background/shadow/ring on non-active items
+                    className={`
+                      group/item relative flex h-12 items-center gap-4 rounded-xl px-6 py-3
+                      transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)]
+                      select-none
+                      ${active
+                        ? 'bg-gradient-to-r from-gray-200/80 via-gray-100/60 to-gray-200/40 text-gray-900'
+                        : 'text-gray-600 hover:text-gray-900 hover:bg-gradient-to-r hover:from-white/60 hover:to-gray-100/30 hover:shadow-lg hover:ring-1 hover:ring-gray-200'
+                    }
+                    `}
                 >
                     {active && <span className="absolute left-0 top-1/2 -translate-y-1/2 h-2/3 w-1 rounded-full bg-gray-700 opacity-60" />}
-                    <span
-                        className={`z-10 transition-all duration-500 ${
-                            active ? "text-gray-900 scale-[1.15] -rotate-6" : "group-hover/item:scale-110 group-hover/item:text-gray-900"
-                        }`}
+
+                    {/* 3. Added animate and whileHover to the icon span */}
+                    <motion.span
+                        className="z-10" // Simplified base class, removed group-hover styles
+                        animate={active ? { scale: 1.15, rotate: -6 } : {}}
+                        whileHover={!active ? { scale: 1.2, rotate: -4, color: '#0f172a' } : {}}
+                        transition={{ duration: 0.2 }} // Add a small transition for smoothness
                     >
-            {meta.icon}
-          </span>
-                    <span
-                        className={`whitespace-nowrap text-[0.95rem] font-medium tracking-wide transition-all duration-500 ${
-                            isHovered ? "opacity-100 translate-x-0" : "opacity-0 -translate-x-10"
-                        } ${active ? "text-gray-800" : ""}`}
+                        {meta.icon}
+                    </motion.span>
+
+                    {/* 4. Added whileHover to the text span and adjusted className */}
+                    <motion.span
+                        className={`
+                            whitespace-nowrap text-[0.95rem] font-medium tracking-wide
+                            transition-all duration-300
+                            ${isHovered ? 'opacity-100' : 'opacity-0'} // Simplified: relies on sidebar hover state for visibility
+                            ${active ? 'text-gray-800' : ''}
+                         `}
+                        whileHover={!active ? { x: 4, color: '#0f172a' } : {}}
+                        transition={{ duration: 0.2 }} // Add a small transition for smoothness
                     >
-            {meta.name}
-          </span>
+                        {meta.name}
+                    </motion.span>
                 </Link>
             </motion.div>
         );
@@ -166,7 +186,7 @@ export default function Sidebar() {
                         onMouseEnter={() => isDesktop && setIsHovered(true)}
                         onMouseLeave={() => isDesktop && setIsHovered(false)}
                         className={`fixed left-6 top-1/2 z-40 flex h-[85vh] -translate-y-1/2 flex-col overflow-hidden rounded-2xl border bg-gradient-to-b from-white/95 via-gray-100/95 to-white/95 border-gray-200/90 backdrop-blur shadow-[0_0_60px_-15px_rgba(0,0,0,0.15)] transition-all duration-500 ${
-                            isHovered ? "w-72" : "w-24"
+                            isHovered ? "w-72" : "w-24" // Width transition based on hover
                         }`}
                     >
                         {/* Logo */}
@@ -176,11 +196,11 @@ export default function Sidebar() {
                             </div>
                             <span
                                 className={`ml-3 text-lg font-medium tracking-wide text-gray-800 transition-all duration-500 ${
-                                    isHovered ? "opacity-100" : "opacity-0 -translate-x-10"
+                                    isHovered ? "opacity-100" : "opacity-0 -translate-x-10" // Text visibility based on hover
                                 }`}
                             >
-                GPU 仪表板
-              </span>
+                                GPU 仪表板
+                            </span>
                         </Link>
 
                         {/* Nav groups */}
