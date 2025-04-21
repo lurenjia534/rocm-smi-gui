@@ -42,7 +42,7 @@ function Stat({ label, value }: { label: string; value?: string | number | null 
     )
 }
 
-function GpuCard({ raw }: { raw: RawDevice }) {
+function GpuCard({ raw, rocmVer }: { raw: RawDevice; rocmVer?: string | null }) {
     const d = normalize(raw)
     return (
         <div className="rounded-xl bg-neutral-800 p-4 shadow-lg ring-1 ring-neutral-700 flex flex-col gap-2 min-w-[260px]">
@@ -65,16 +65,6 @@ function GpuCard({ raw }: { raw: RawDevice }) {
             </h2>
             <p className="text-xs text-neutral-400">{d.subsystem}</p>
 
-            {/* 温度条 */}
-            {typeof d.edgeTemp === 'number' && (
-                <div className="w-full h-2 rounded bg-neutral-700 overflow-hidden">
-                    <div
-                        className="h-full bg-rose-500"
-                        style={{ width: `${Math.min(d.edgeTemp, 100)}%` }}
-                    />
-                </div>
-            )}
-
             <Stat label="核心温度" value={d.edgeTemp && `${d.edgeTemp}°C`} />
             <Stat label="热点温度" value={d.hotspotTemp && `${d.hotspotTemp}°C`} />
             <Stat label="显存温度" value={d.memTemp && `${d.memTemp}°C`} />
@@ -94,6 +84,11 @@ function GpuCard({ raw }: { raw: RawDevice }) {
                 />
             )}
             <Stat label="VRAM 利用" value={d.vramUtil && `${d.vramUtil}%`} />
+            {rocmVer && (
+                <div className="mt-1 text-xs text-neutral-500 text-right">
+                    ROCm‑SMI {rocmVer}
+                </div>
+            )}
         </div>
     )
 }
@@ -101,12 +96,20 @@ function GpuCard({ raw }: { raw: RawDevice }) {
 /* ---------- 页面 ---------- */
 export default function Home() {
     const [snapshot, setSnapshot] = useState<RawDevice[] | null>(null)
+    const [rocmVer, setRocmVer] = useState<string | null>(null)
 
     useEffect(() => {
         // 只监听实时事件即可；首次 snapshot 也会推送
         const unlisten = listen<RawDevice[]>('gpu-update', ({ payload }) =>
             setSnapshot(payload),
         )
+        // 取Rocm版本 (一次就够了)
+        import('@tauri-apps/api/core').then(({ invoke }) => {
+            invoke<{ version?: { 'ROCM-SMI version': string } }>('check_rocm_smi')
+                .then(res => setRocmVer(res.version?.['ROCM-SMI version'] ?? null))
+                .catch(() => setRocmVer(null))
+        })
+
         return () => {
             unlisten.then((f) => f())
         }
@@ -119,7 +122,7 @@ export default function Home() {
             ) : (
                 <div className="max-w-6xl mx-auto grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                     {snapshot.map((d, i) => (
-                        <GpuCard key={i} raw={d} />
+                        <GpuCard key={i} raw={d} rocmVer={rocmVer} />
                     ))}
                 </div>
             )}
