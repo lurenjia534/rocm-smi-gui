@@ -60,22 +60,22 @@ function ProcessTable({ procs }: { procs: RocmPid[] }) {
     if (procs.length === 0) return null
     return (
         <motion.div 
-            className="w-full max-w-7xl mx-auto px-4 pb-10 overflow-x-auto"
+            className="w-full max-w-7xl mx-auto px-6 pb-12 overflow-x-auto"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
+            transition={{ duration: 0.5, delay: 0.2 }}
         >
-            <div className="rounded-xl bg-white/90 shadow-lg p-5 backdrop-blur-sm">
-                <h3 className="text-gray-700 font-medium text-lg mb-4">运行中的 GPU 进程</h3>
+            <div className="rounded-xl bg-white/90 shadow-lg p-6 backdrop-blur-sm">
+                <h3 className="text-gray-700 font-medium text-xl mb-5">运行中的 GPU 进程</h3>
                 <div className="overflow-hidden">
                     <table className="min-w-full text-sm">
                         <thead className="bg-transparent text-gray-500">
                         <tr>
-                            <th className="px-3 py-3 text-left font-medium">PID</th>
-                            <th className="px-3 py-3 text-left font-medium">进程</th>
-                            <th className="px-3 py-3 text-right font-medium">GPU</th>
-                            <th className="px-3 py-3 text-right font-medium">显存&nbsp;MB</th>
-                            <th className="px-3 py-3 text-right font-medium">引擎&nbsp;%</th>
+                            <th className="px-4 py-3 text-left font-medium">PID</th>
+                            <th className="px-4 py-3 text-left font-medium">进程</th>
+                            <th className="px-4 py-3 text-right font-medium">GPU</th>
+                            <th className="px-4 py-3 text-right font-medium">显存&nbsp;MB</th>
+                            <th className="px-4 py-3 text-right font-medium">引擎&nbsp;%</th>
                         </tr>
                         </thead>
                         <tbody>
@@ -87,20 +87,20 @@ function ProcessTable({ procs }: { procs: RocmPid[] }) {
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ 
                                     duration: 0.3, 
-                                    delay: index * 0.05,
+                                    delay: 0.3 + index * 0.05,
                                     type: 'spring',
                                     stiffness: 120,
                                     damping: 20
                                 }}
                             >
-                                <td className="px-3 py-3 text-gray-700">{p.pid}</td>
-                                <td className="px-3 py-3 text-gray-800 font-medium">{p.name}</td>
-                                <td className="px-3 py-3 text-right text-gray-700">{p.gpu_index}</td>
-                                <td className="px-3 py-3 text-right text-gray-700">
+                                <td className="px-4 py-4 text-gray-700">{p.pid}</td>
+                                <td className="px-4 py-4 text-gray-800 font-medium">{p.name}</td>
+                                <td className="px-4 py-4 text-right text-gray-700">{p.gpu_index}</td>
+                                <td className="px-4 py-4 text-right text-gray-700">
                                     <span className="font-medium">{(p.vram_bytes / 1_048_576).toFixed(1)}</span>
                                 </td>
-                                <td className="px-3 py-3 text-right">
-                                    <span className={`px-2 py-1 rounded-lg text-xs ${
+                                <td className="px-4 py-4 text-right">
+                                    <span className={`px-3 py-1.5 rounded-lg text-xs ${
                                         p.engine_usage > 70 ? 'bg-gray-200 text-gray-800' : 
                                         p.engine_usage > 30 ? 'bg-gray-100 text-gray-700' : 
                                         'bg-gray-50 text-gray-600'
@@ -203,7 +203,7 @@ function MetricCard({
     return (
         <motion.div
             className="
-                h-20 w-full rounded-xl p-4 
+                h-28 w-full rounded-xl p-5 
                 bg-white/90 shadow-md backdrop-blur-sm
                 transition-all duration-300 ease-out
                 flex items-center
@@ -216,13 +216,13 @@ function MetricCard({
             transition={{ type: 'spring', stiffness: 400, damping: 17 }}
         >
             {/* 左侧区域：图标和文字信息 */}
-            <div className="flex-1 flex items-center gap-3">
-                <div className="bg-gray-100 rounded-full p-2">
-                    <IconComponent className="h-5 w-5 text-gray-600" strokeWidth={1.5} />
+            <div className="flex-1 flex items-center gap-4">
+                <div className="bg-gray-100 rounded-full p-3">
+                    <IconComponent className="h-6 w-6 text-gray-600" strokeWidth={1.5} />
                 </div>
                 <div className="flex flex-col">
-                    <span className="text-xs text-gray-500 leading-tight">{label}</span>
-                    <span className="text-base font-medium text-gray-800 leading-tight">
+                    <span className="text-sm text-gray-500 leading-tight">{label}</span>
+                    <span className="text-xl font-medium text-gray-800 leading-tight mt-1">
                         {displayValue}{displayUnit}
                     </span>
                 </div>
@@ -230,7 +230,7 @@ function MetricCard({
             
             {/* 右侧区域：进度条 */}
             {progressValue !== null && (
-                <div className="w-1/3 h-3 bg-gray-100 rounded-full overflow-hidden">
+                <div className="w-1/3 h-4 bg-gray-100 rounded-full overflow-hidden">
                     <motion.div 
                         className={`h-full ${getProgressColor(progressValue)}`}
                         initial={{ width: 0 }}
@@ -292,25 +292,37 @@ function MetricsGrid({ device }: { device: NormalizedDevice }) {
 
     return (
         <motion.div 
-            className="w-full max-w-7xl mx-auto pt-24 pb-6 px-4"
+            className="w-full max-w-7xl mx-auto pt-32 pb-8 px-6"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.5 }}
         >
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                {metrics.map((metric) => {
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                {metrics.map((metric, index) => {
                     const formattedValue = formatValue(metric);
                     // 只为显存占用特殊处理单位
                     const unit = metric.key === 'vramUsed' ? undefined : metric.unit;
 
                     return (
-                        <MetricCard
+                        <motion.div
                             key={metric.key}
-                            icon={metric.icon}
-                            label={metric.label}
-                            value={formattedValue}
-                            unit={unit}
-                        />
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ 
+                                duration: 0.4, 
+                                delay: index * 0.05, 
+                                type: 'spring',
+                                stiffness: 100,
+                                damping: 15
+                            }}
+                        >
+                            <MetricCard
+                                icon={metric.icon}
+                                label={metric.label}
+                                value={formattedValue}
+                                unit={unit}
+                            />
+                        </motion.div>
                     )
                 })}
             </div>
