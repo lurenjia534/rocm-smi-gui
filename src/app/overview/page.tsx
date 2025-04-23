@@ -60,7 +60,7 @@ function ProcessTable({ procs }: { procs: RocmPid[] }) {
     if (procs.length === 0) return null
     return (
         <motion.div 
-            className="w-full max-w-7xl mx-auto px-6 pb-12 overflow-x-auto"
+            className="w-full max-w-7xl mx-auto px-6 md:pl-24 pb-12 overflow-x-auto"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.2 }}
@@ -292,7 +292,7 @@ function MetricsGrid({ device }: { device: NormalizedDevice }) {
 
     return (
         <motion.div 
-            className="w-full max-w-7xl mx-auto pt-32 pb-8 px-6"
+            className="w-full max-w-7xl mx-auto pt-32 pb-8 px-6 md:pl-24"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.5 }}
@@ -353,7 +353,7 @@ function TopControls({
 
     return (
         <motion.div 
-            className="absolute top-0 left-0 right-0 h-20 px-6 bg-white/95 backdrop-blur-sm flex items-center justify-between z-10 shadow-sm"
+            className="absolute top-0 md:left-20 left-0 right-0 h-20 px-6 bg-white/95 backdrop-blur-sm flex items-center justify-between z-10 shadow-sm"
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, type: 'spring', stiffness: 100 }}
@@ -592,18 +592,18 @@ export default function Home() {
     // Determines what to display based on current state (error, loading, data)
     const renderContent = () => {
         if (error) {
-            return <p className="absolute inset-0 flex items-center justify-center text-red-600 px-6 text-center">{error}</p>;
+            return <p className="absolute inset-0 md:left-20 flex items-center justify-center text-red-600 px-6 text-center">{error}</p>;
         }
         if (snapshot === null) {
             return (
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 text-gray-500">
+                <div className="absolute inset-0 md:left-20 flex flex-col items-center justify-center gap-4 text-gray-500">
                     <Icon.Loader className="animate-spin h-8 w-8 text-gray-400" />
                     <span>等待 GPU 数据...</span>
                 </div>
             );
         }
         if (snapshot.length === 0) {
-            return <p className="absolute inset-0 flex items-center justify-center text-gray-500">未检测到支持的 GPU 设备。</p>;
+            return <p className="absolute inset-0 md:left-20 flex items-center justify-center text-gray-500">未检测到支持的 GPU 设备。</p>;
         }
         // Display controls and grid when data is available
         return (
@@ -624,7 +624,7 @@ export default function Home() {
 
     // --- Main Component Return ---
     return (
-        <main className="relative min-h-screen bg-gray-50 text-gray-900 overflow-x-hidden">
+        <main className="relative min-h-screen bg-gray-50 text-gray-900 overflow-x-hidden md:pl-20">
             {renderContent()}
         </main>
     );
