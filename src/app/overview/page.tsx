@@ -23,7 +23,7 @@ type RocmPid = {
     gpu_index: number
     vram_bytes: number
     engine_usage: number
-    state: string
+    state: string  // 'active' | 'stale' - 表示进程是活跃的还是可能已退出但延迟显示
 }
 
 /* ---------- Data Normalization (Remains the same) ---------- */
@@ -55,63 +55,282 @@ function normalize(d: RawDevice | null | undefined) {
 }
 
 
-/* ---------- ★ 新组件：ProcessTable ---------- */
+/* ---------- ★ 进程图标组件 ---------- */
+const ProcessIcon = ({ name, state }: { name: string, state?: string }) => {
+    // 安全处理名称，防止undefined导致错误
+    const safeName = name || '';
+    const lowerName = safeName.toLowerCase();
+    const isStale = state === 'stale';
+    
+    // Ollama 大语言模型进程
+    if (lowerName.includes('ollama')) {
+        return (
+            <div className={`relative flex items-center justify-center w-8 h-8 rounded-lg ${isStale ? 'bg-gray-50' : 'bg-blue-50'}`}>
+                <div className="relative w-6 h-6">
+                    <Icon.Brain className={`w-6 h-6 ${isStale ? 'text-gray-400' : 'text-blue-500'}`} strokeWidth={1.5} />
+                    {!isStale && (
+                        <motion.div
+                            className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-blue-400"
+                            animate={{ opacity: [1, 0.4, 1] }}
+                            transition={{ duration: 1.5, repeat: Infinity }}
+                        />
+                    )}
+                    {isStale && (
+                        <motion.div
+                            className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-amber-400"
+                            animate={{ opacity: [0.4, 0.8, 0.4] }}
+                            transition={{ duration: 1, repeat: Infinity }}
+                        />
+                    )}
+                </div>
+            </div>
+        );
+    }
+    
+    // 图形/GPU加速进程
+    if (lowerName.includes('compiz') || lowerName.includes('gnome-shell') || lowerName.includes('xorg') || lowerName.includes('wayland') || lowerName.includes('display')) {
+        return <Icon.Monitor className="w-6 h-6 text-gray-500" />;
+    }
+    
+    // 机器学习/AI相关进程
+    if (lowerName.includes('python') || lowerName.includes('torch') || lowerName.includes('tensorflow') || lowerName.includes('nvidia-smi')) {
+        return <Icon.Bot className="w-6 h-6 text-gray-500" />;
+    }
+    
+    // 计算任务
+    if (lowerName.includes('compute') || lowerName.includes('calc') || lowerName.includes('math')) {
+        return <Icon.Calculator className="w-6 h-6 text-gray-500" />;
+    }
+    
+    // 游戏相关进程
+    if (lowerName.includes('game') || lowerName.includes('steam') || lowerName.includes('vulkan')) {
+        return <Icon.Gamepad2 className="w-6 h-6 text-gray-500" />;
+    }
+    
+    // 数据库相关进程
+    if (lowerName.includes('sql') || lowerName.includes('mongo') || lowerName.includes('redis') || lowerName.includes('db')) {
+        return <Icon.Database className="w-6 h-6 text-gray-500" />;
+    }
+    
+    // 浏览器相关进程
+    if (lowerName.includes('chrome') || lowerName.includes('firefox') || lowerName.includes('edge') || lowerName.includes('safari')) {
+        return <Icon.Globe className="w-6 h-6 text-gray-500" />;
+    }
+    
+    // 媒体相关进程
+    if (lowerName.includes('ffmpeg') || lowerName.includes('media') || lowerName.includes('video') || lowerName.includes('audio')) {
+        return <Icon.Video className="w-6 h-6 text-gray-500" />;
+    }
+    
+    // 默认图标
+    return <Icon.Terminal className="w-6 h-6 text-gray-500" />;
+};
+
+/* ---------- ★ 新组件：ProcessTable（现代风格设计） ---------- */
 function ProcessTable({ procs }: { procs: RocmPid[] }) {
-    if (procs.length === 0) return null
+    // 确保传入的procs是有效数组且过滤掉可能的无效数据
+    const validProcs = Array.isArray(procs) 
+        ? procs.filter(p => p && typeof p === 'object' && p.pid && p.name) 
+        : [];
+        
+    // 排序进程：按显存使用量降序
+    const sortedProcs = [...validProcs].sort((a, b) => b.vram_bytes - a.vram_bytes);
+    
     return (
         <motion.div 
-            className="w-full max-w-7xl mx-auto px-6 md:pl-24 pb-12 overflow-x-auto"
+            className="w-full max-w-7xl mx-auto px-6 md:pl-24 pb-12 overflow-hidden"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.2 }}
         >
-            <div className="rounded-xl bg-white/90 shadow-lg p-6 backdrop-blur-sm">
-                <h3 className="text-gray-700 font-medium text-xl mb-5">运行中的 GPU 进程</h3>
-                <div className="overflow-hidden">
+            <div className="rounded-xl bg-white/90 shadow-lg backdrop-blur-sm overflow-hidden">
+                {/* 标题区域 */}
+                <div className="p-6 pb-4 border-b border-gray-100 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="bg-gray-50 rounded-full p-2">
+                            <Icon.Layers className="h-5 w-5 text-gray-500" strokeWidth={1.5} />
+                        </div>
+                        <h3 className="text-gray-700 font-medium text-lg">运行中的 GPU 进程</h3>
+                    </div>
+                    
+                    <div className="flex items-center gap-2 text-sm text-gray-400">
+                        <motion.div 
+                            animate={{ scale: [1, 1.15, 1] }}
+                            transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+                            className="flex items-center text-gray-500"
+                        >
+                            <Icon.Activity className="h-4 w-4 mr-1.5" />
+                            <span className="font-medium">{sortedProcs.length}</span>
+                        </motion.div>
+                        <span className="px-1.5">进程</span>
+                    </div>
+                </div>
+                
+                {/* 表格区域 */}
+                <div className="overflow-x-auto">
                     <table className="min-w-full text-sm">
-                        <thead className="bg-transparent text-gray-500">
-                        <tr>
-                            <th className="px-4 py-3 text-left font-medium">PID</th>
-                            <th className="px-4 py-3 text-left font-medium">进程</th>
-                            <th className="px-4 py-3 text-right font-medium">GPU</th>
-                            <th className="px-4 py-3 text-right font-medium">显存&nbsp;MB</th>
-                            <th className="px-4 py-3 text-right font-medium">引擎&nbsp;%</th>
-                        </tr>
+                        <thead className="bg-gray-50/50 text-gray-500 border-b border-gray-100">
+                            <tr>
+                                <th className="px-6 py-3 text-left font-medium"></th>
+                                <th className="px-6 py-3 text-left font-medium">PID</th>
+                                <th className="px-6 py-3 text-left font-medium">进程名称</th>
+                                <th className="px-6 py-3 text-center font-medium">GPU</th>
+                                <th className="px-6 py-3 text-right font-medium">显存</th>
+                                <th className="px-6 py-3 text-right font-medium">引擎利用率</th>
+                            </tr>
                         </thead>
-                        <tbody>
-                        {procs.map((p, index) => (
-                            <motion.tr 
-                                key={p.pid} 
-                                className="hover:bg-gray-50/80"
-                                initial={{ opacity: 0, y: 10 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ 
-                                    duration: 0.3, 
-                                    delay: 0.3 + index * 0.05,
-                                    type: 'spring',
-                                    stiffness: 120,
-                                    damping: 20
-                                }}
-                            >
-                                <td className="px-4 py-4 text-gray-700">{p.pid}</td>
-                                <td className="px-4 py-4 text-gray-800 font-medium">{p.name}</td>
-                                <td className="px-4 py-4 text-right text-gray-700">{p.gpu_index}</td>
-                                <td className="px-4 py-4 text-right text-gray-700">
-                                    <span className="font-medium">{(p.vram_bytes / 1_048_576).toFixed(1)}</span>
-                                </td>
-                                <td className="px-4 py-4 text-right">
-                                    <span className={`px-3 py-1.5 rounded-lg text-xs ${
-                                        p.engine_usage > 70 ? 'bg-gray-200 text-gray-800' : 
-                                        p.engine_usage > 30 ? 'bg-gray-100 text-gray-700' : 
-                                        'bg-gray-50 text-gray-600'
-                                    }`}>
-                                        {p.engine_usage}
-                                    </span>
-                                </td>
-                            </motion.tr>
-                        ))}
+                        <tbody className="divide-y divide-gray-50">
+                            {sortedProcs.length > 0 ? (
+                                sortedProcs.map((p, index) => {
+                                    const isOllama = p.name.toLowerCase().includes('ollama');
+                                    const memoryUsage = p.vram_bytes / 1_048_576; // MB
+                                    
+                                    return (
+                                        <motion.tr 
+                                            key={p.pid} 
+                                            className={`hover:bg-gray-50/80 ${
+                                                isOllama && p.state !== 'stale' ? 'bg-blue-50/10' : 
+                                                p.state === 'stale' ? 'bg-amber-50/5' : ''
+                                            }`}
+                                            initial={{ opacity: 0, y: 10 }}
+                                            animate={{ 
+                                                opacity: p.state === 'stale' ? 0.7 : 1, 
+                                                y: 0 
+                                            }}
+                                            transition={{ 
+                                                duration: 0.3, 
+                                                delay: 0.3 + (index < 10 ? index * 0.05 : 0.5), // 限制最大延迟
+                                                type: 'spring',
+                                                stiffness: 120,
+                                                damping: 20
+                                            }}
+                                            whileHover={{
+                                                backgroundColor: 
+                                                    isOllama && p.state !== 'stale' ? 'rgba(239, 246, 255, 0.5)' : 
+                                                    p.state === 'stale' ? 'rgba(254, 243, 199, 0.2)' : 
+                                                    'rgba(249, 250, 251, 0.8)',
+                                                opacity: p.state === 'stale' ? 0.9 : 1
+                                            }}
+                                        >
+                                            <td className="pl-6 py-4">
+                                                <motion.div
+                                                    initial={{ scale: 0.9, opacity: 0.8 }}
+                                                    whileHover={{ scale: 1.05, opacity: 1 }}
+                                                    transition={{ duration: 0.2 }}
+                                                >
+                                                    <ProcessIcon name={p.name} state={p.state} />
+                                                </motion.div>
+                                            </td>
+                                            <td className="px-6 py-4 text-gray-600 font-mono">{p.pid}</td>
+                                            <td className="px-6 py-4">
+                                                <div className="flex flex-col">
+                                                    <div className="flex items-center gap-1.5">
+                                                        <span className="text-gray-800 font-medium">{p.name}</span>
+                                                        {p.state === 'stale' && (
+                                                            <motion.span
+                                                                initial={{ opacity: 0 }}
+                                                                animate={{ opacity: 1 }}
+                                                                className="px-1.5 py-0.5 text-xs rounded-full bg-amber-50 text-amber-600 border border-amber-100"
+                                                            >
+                                                                可能已退出
+                                                            </motion.span>
+                                                        )}
+                                                    </div>
+                                                    {isOllama && (
+                                                        <span className="text-xs text-blue-500 font-medium mt-0.5 flex items-center gap-1">
+                                                            <Icon.Sparkles className="w-3 h-3" />
+                                                            大语言模型
+                                                            {p.state === 'stale' && (
+                                                                <span className="text-xs text-amber-500 ml-1">
+                                                                    （已停止运行，界面即将更新）
+                                                                </span>
+                                                            )}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4 text-center">
+                                                <span className="inline-block px-2.5 py-1 bg-gray-100 text-gray-600 rounded-md">
+                                                    {p.gpu_index}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4 text-right">
+                                                <div className="flex flex-col items-end">
+                                                    <span className="font-medium text-gray-700">{memoryUsage.toFixed(1)} MB</span>
+                                                    {memoryUsage > 1000 && (
+                                                        <span className="text-xs text-gray-500 mt-0.5">
+                                                            {(memoryUsage / 1024).toFixed(2)} GB
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4 text-right">
+                                                <div className="inline-flex items-center">
+                                                    <div className="w-16 h-2 bg-gray-100 rounded-full mr-2 overflow-hidden">
+                                                        <motion.div
+                                                            className={`h-full ${
+                                                                p.engine_usage > 70 ? 'bg-gray-600' : 
+                                                                p.engine_usage > 30 ? 'bg-gray-500' : 
+                                                                'bg-gray-400'
+                                                            }`}
+                                                            initial={{ width: 0 }}
+                                                            animate={{ width: `${p.engine_usage}%` }}
+                                                            transition={{ 
+                                                                type: 'spring', 
+                                                                stiffness: 100, 
+                                                                damping: 15,
+                                                                delay: 0.5 + index * 0.05
+                                                            }}
+                                                        />
+                                                    </div>
+                                                    <span className={`font-medium ${
+                                                        p.engine_usage > 70 ? 'text-gray-800' : 
+                                                        p.engine_usage > 30 ? 'text-gray-700' : 
+                                                        'text-gray-600'
+                                                    }`}>
+                                                        {p.engine_usage}%
+                                                    </span>
+                                                </div>
+                                            </td>
+                                        </motion.tr>
+                                    );
+                                })
+                            ) : (
+                                // 无进程时显示的空状态
+                                <tr>
+                                    <td colSpan={6} className="px-6 py-10 text-center">
+                                        <motion.div 
+                                            className="flex flex-col items-center"
+                                            initial={{ opacity: 0 }}
+                                            animate={{ opacity: 1 }}
+                                            transition={{ duration: 0.5 }}
+                                        >
+                                            <div className="bg-gray-50 rounded-full p-4 mb-3">
+                                                <Icon.Search className="h-8 w-8 text-gray-400" strokeWidth={1.5} />
+                                            </div>
+                                            <p className="text-gray-500 mb-1.5">当前没有使用 GPU 的进程</p>
+                                            <p className="text-xs text-gray-400">
+                                                当有程序使用 GPU 资源时，将在此处列出
+                                            </p>
+                                        </motion.div>
+                                    </td>
+                                </tr>
+                            )}
                         </tbody>
                     </table>
+                </div>
+                
+                {/* 底部装饰元素 */}
+                <div className="py-3 px-6 bg-gray-50/50 border-t border-gray-100 text-xs text-gray-400 flex justify-between items-center">
+                    <span>进程数据每 2 秒更新一次</span>
+                    <motion.div 
+                        className="flex items-center gap-1"
+                        animate={{ opacity: [0.6, 1, 0.6] }}
+                        transition={{ duration: 2, repeat: Infinity }}
+                    >
+                        <span className="w-1.5 h-1.5 rounded-full bg-gray-300"></span>
+                        <span>实时监控中</span>
+                    </motion.div>
                 </div>
             </div>
         </motion.div>
@@ -448,6 +667,76 @@ function TopControls({
     )
 }
 
+/* ---------- 客户端动画背景组件 ---------- */
+// 使用客户端专用组件避免服务端渲染随机动画导致的水合问题
+const LoadingBackground = () => {
+    const [isClient, setIsClient] = useState(false);
+    
+    // 确保仅在客户端执行
+    useEffect(() => {
+        setIsClient(true);
+    }, []);
+
+    // 服务端或初始渲染时返回静态背景
+    if (!isClient) {
+        return (
+            <div className="absolute inset-0 overflow-hidden bg-gray-50/30" />
+        );
+    }
+
+    // 预生成固定的随机参数避免每次渲染变化
+    const generateFixedRandomParams = () => {
+        const items = [];
+        for (let i = 0; i < 12; i++) {
+            const seed = i * 0.1; // 使用固定种子
+            items.push({
+                initialX: 50 * i + 20,
+                initialY: 30 * i + 10,
+                initialScale: 0.5 + (i % 5) * 0.1,
+                initialOpacity: 0.2 + (i % 4) * 0.05,
+                initialRotate: (i % 7) * 4 - 12,
+                
+                animateX: 50 * i + (i % 3) * 15,
+                animateY: 30 * i + (i % 4) * 10,
+                animateOpacity: 0.15 + (i % 5) * 0.06,
+                animateRotate: (i % 9) * 3 - 10
+            });
+        }
+        return items;
+    };
+
+    const randomParams = generateFixedRandomParams();
+
+    return (
+        <div className="absolute inset-0 overflow-hidden">
+            {randomParams.map((params, i) => (
+                <motion.div
+                    key={i}
+                    className="absolute w-20 h-20 rounded-xl bg-gray-200/40"
+                    initial={{
+                        x: params.initialX,
+                        y: params.initialY,
+                        scale: params.initialScale,
+                        opacity: params.initialOpacity,
+                        rotate: params.initialRotate
+                    }}
+                    animate={{
+                        x: params.animateX,
+                        y: params.animateY,
+                        opacity: params.animateOpacity,
+                        rotate: params.animateRotate
+                    }}
+                    transition={{
+                        duration: 15,
+                        repeat: Infinity,
+                        repeatType: "reverse"
+                    }}
+                />
+            ))}
+        </div>
+    );
+};
+
 /* ---------- Main Page Component (Monochrome Style) ---------- */
 export default function Home() {
     const [snapshot, setSnapshot] = useState<RawDevice[] | null>(null)
@@ -525,8 +814,65 @@ export default function Home() {
             });
 
         /* ---------- ★ 进程监听 ---------- */
+        // 记录已知的Ollama进程ID
+        const knownOllamaPids = new Set<number>();
+        let ollamaTimeoutIds: Record<number, NodeJS.Timeout> = {};
+        
         listen<RocmPid[]>('gpu-pids-update', ({ payload }) => {
-            if (Array.isArray(payload)) setProcs(payload)
+            if (Array.isArray(payload)) {
+                // 处理进程状态逻辑
+                const processedPayload = payload.filter(proc => proc != null).map(proc => {
+                    // 检查是否包含Ollama进程
+                    const isOllama = proc.name && proc.name.toLowerCase().includes('ollama');
+                    
+                    // 清除该进程之前的超时计时器（如果存在）
+                    if (isOllama && ollamaTimeoutIds[proc.pid]) {
+                        clearTimeout(ollamaTimeoutIds[proc.pid]);
+                        delete ollamaTimeoutIds[proc.pid];
+                    }
+                    
+                    // 记录新发现的Ollama进程
+                    if (isOllama) {
+                        knownOllamaPids.add(proc.pid);
+                    }
+                    
+                    return proc; // 保持原始进程信息
+                });
+                
+                // 更新进程列表
+                setProcs(processedPayload);
+                
+                // 检查通知中是否缺少之前看到的Ollama进程
+                const currentPids = new Set(payload.map(p => p.pid));
+                const missingOllamaPids = [...knownOllamaPids].filter(pid => !currentPids.has(pid));
+                
+                // 处理消失的Ollama进程，设置延迟移除
+                missingOllamaPids.forEach(pid => {
+                    console.log(`Ollama进程 ${pid} 可能已退出，将在5秒后从列表中移除`);
+                    
+                    // 首先将进程标记为stale状态
+                    setProcs(prev => 
+                        prev.map(p => 
+                            p.pid === pid 
+                                ? { ...p, state: 'stale' } 
+                                : p
+                        )
+                    );
+                    
+                    // 设置定时器，5秒后移除进程
+                    if (!ollamaTimeoutIds[pid]) {
+                        ollamaTimeoutIds[pid] = setTimeout(() => {
+                            console.log(`移除超时的Ollama进程 ${pid}`);
+                            // 从已知集合中移除
+                            knownOllamaPids.delete(pid);
+                            // 从进程列表中移除
+                            setProcs(prev => prev.filter(p => p.pid !== pid));
+                            // 清除超时计时器引用
+                            delete ollamaTimeoutIds[pid];
+                        }, 5000); // 5秒后移除
+                    }
+                });
+            }
         }).then(fn => (unlistenPid = fn))
           .catch(err => {
                 console.error("Effect Hook: Failed to listen for gpu-pids-update:", err);
@@ -558,6 +904,12 @@ export default function Home() {
                 unlistenPid(); // Detach the pid listener
                 console.log("Effect Hook: PID Listener detached.");
             }
+            
+            // 清除所有Ollama进程超时计时器
+            Object.values(ollamaTimeoutIds).forEach(timeoutId => {
+                clearTimeout(timeoutId);
+            });
+            ollamaTimeoutIds = {};
         };
     }, []); // <-- **Correct**: Empty array `[]` ensures this effect runs only on mount/unmount
 
@@ -592,18 +944,185 @@ export default function Home() {
     // Determines what to display based on current state (error, loading, data)
     const renderContent = () => {
         if (error) {
-            return <p className="absolute inset-0 md:left-20 flex items-center justify-center text-red-600 px-6 text-center">{error}</p>;
+            return (
+                <motion.div 
+                    className="absolute inset-0 md:left-20 flex flex-col items-center justify-center px-6 text-center"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.5 }}
+                >
+                    <div className="bg-white/90 rounded-xl shadow-md p-8 max-w-md backdrop-blur-sm">
+                        <div className="flex justify-center mb-4">
+                            <div className="rounded-full bg-red-50 p-3">
+                                <Icon.AlertTriangle className="h-8 w-8 text-red-500" />
+                            </div>
+                        </div>
+                        <h3 className="text-lg font-medium text-gray-800 mb-2">连接错误</h3>
+                        <p className="text-red-600">{error}</p>
+                        <button 
+                            className="mt-4 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm text-gray-700 transition-colors"
+                            onClick={() => window.location.reload()}
+                        >
+                            重新加载
+                        </button>
+                    </div>
+                </motion.div>
+            );
         }
         if (snapshot === null) {
             return (
-                <div className="absolute inset-0 md:left-20 flex flex-col items-center justify-center gap-4 text-gray-500">
-                    <Icon.Loader className="animate-spin h-8 w-8 text-gray-400" />
-                    <span>等待 GPU 数据...</span>
-                </div>
+                <motion.div 
+                    className="absolute inset-0 md:left-20 flex flex-col items-center justify-center"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.3 }}
+                >
+                    {/* 背景元素 - 使用客户端渲染避免水合错误 */}
+                    <LoadingBackground />
+    
+                    {/* 加载容器 */}
+                    <motion.div 
+                        className="relative z-10 bg-white/80 rounded-2xl shadow-xl p-8 max-w-md backdrop-blur-lg border border-gray-100"
+                        initial={{ scale: 0.9, y: 20 }}
+                        animate={{ scale: 1, y: 0 }}
+                        transition={{ 
+                            duration: 0.7, 
+                            type: "spring",
+                            stiffness: 100
+                        }}
+                    >
+                        <div className="flex flex-col items-center">
+                            {/* 图形化表示 */}
+                            <div className="relative w-24 h-24 mb-6">
+                                <motion.div 
+                                    className="absolute inset-0 rounded-xl bg-gray-100 border border-gray-200"
+                                    animate={{ 
+                                        rotate: [0, 90, 180, 270, 360],
+                                        scale: [1, 1.05, 1],
+                                    }}
+                                    transition={{ 
+                                        duration: 8, 
+                                        repeat: Infinity,
+                                        ease: "linear" 
+                                    }}
+                                />
+                                <motion.div 
+                                    className="absolute inset-2 rounded-lg bg-gradient-to-br from-gray-100 via-gray-50 to-white shadow-inner"
+                                    animate={{ 
+                                        rotate: [0, -120, -240, -360],
+                                    }}
+                                    transition={{ 
+                                        duration: 10, 
+                                        repeat: Infinity,
+                                        ease: "linear" 
+                                    }}
+                                />
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                    <Icon.Cpu className="h-10 w-10 text-gray-400/80" strokeWidth={1.5} />
+                                </div>
+                                
+                                {/* 闪烁的指示灯 */}
+                                <motion.div
+                                    className="absolute top-1 right-1 w-2 h-2 rounded-full bg-blue-400"
+                                    animate={{ opacity: [1, 0.4, 1] }}
+                                    transition={{ duration: 1.5, repeat: Infinity }}
+                                />
+                            </div>
+                            
+                            {/* 加载标题和文本 */}
+                            <motion.h3 
+                                className="text-lg font-medium text-gray-800 mb-1.5"
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                transition={{ delay: 0.3 }}
+                            >
+                                正在连接 GPU...
+                            </motion.h3>
+                            
+                            <motion.p 
+                                className="text-gray-500 text-sm text-center max-w-xs mb-4"
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                transition={{ delay: 0.5 }}
+                            >
+                                正在读取GPU设备信息并建立连接，这可能需要几秒钟时间
+                            </motion.p>
+                            
+                            {/* 进度指示器 */}
+                            <motion.div 
+                                className="w-64 h-1.5 bg-gray-100 rounded-full overflow-hidden"
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                transition={{ delay: 0.7 }}
+                            >
+                                <motion.div 
+                                    className="h-full bg-gradient-to-r from-gray-400 to-gray-600"
+                                    initial={{ width: "0%" }}
+                                    animate={{ width: ["0%", "30%", "60%", "90%", "90%"] }}
+                                    transition={{ 
+                                        duration: 8, 
+                                        times: [0, 0.2, 0.4, 0.7, 1],
+                                        ease: "easeInOut",
+                                        repeat: Infinity,
+                                        repeatType: "loop"
+                                    }}
+                                />
+                            </motion.div>
+                            
+                            {/* 构建中的指示符 */}
+                            <div className="flex items-center space-x-2 mt-6">
+                                <div className="flex space-x-1">
+                                    {[...Array(3)].map((_, i) => (
+                                        <motion.div
+                                            key={i}
+                                            className="w-2 h-2 rounded-full bg-gray-400"
+                                            animate={{ 
+                                                opacity: [0.3, 1, 0.3],
+                                                scale: [0.8, 1, 0.8]
+                                            }}
+                                            transition={{ 
+                                                duration: 1.5, 
+                                                repeat: Infinity, 
+                                                delay: i * 0.2,
+                                                ease: "easeInOut"
+                                            }}
+                                        />
+                                    ))}
+                                </div>
+                                <span className="text-xs text-gray-400">等待 GPU 数据...</span>
+                            </div>
+                        </div>
+                    </motion.div>
+                </motion.div>
             );
         }
         if (snapshot.length === 0) {
-            return <p className="absolute inset-0 md:left-20 flex items-center justify-center text-gray-500">未检测到支持的 GPU 设备。</p>;
+            return (
+                <motion.div 
+                    className="absolute inset-0 md:left-20 flex items-center justify-center"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.5 }}
+                >
+                    <div className="bg-white/90 rounded-xl shadow-md p-8 max-w-md backdrop-blur-sm">
+                        <div className="flex justify-center mb-4">
+                            <div className="rounded-full bg-gray-50 p-3">
+                                <Icon.Search className="h-8 w-8 text-gray-400" />
+                            </div>
+                        </div>
+                        <h3 className="text-lg font-medium text-gray-800 mb-2 text-center">未检测到 GPU 设备</h3>
+                        <p className="text-gray-500 text-center">未找到支持的 AMD GPU 设备，请确认驱动已正确安装</p>
+                        <div className="flex justify-center mt-6">
+                            <button 
+                                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm text-gray-700 transition-colors"
+                                onClick={() => window.location.reload()}
+                            >
+                                重新检测
+                            </button>
+                        </div>
+                    </div>
+                </motion.div>
+            );
         }
         // Display controls and grid when data is available
         return (
