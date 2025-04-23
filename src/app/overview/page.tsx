@@ -150,7 +150,7 @@ function ProcessTable({ procs }: { procs: RocmPid[] }) {
                         <div className="bg-gray-50 rounded-full p-2">
                             <Icon.Layers className="h-5 w-5 text-gray-500" strokeWidth={1.5} />
                         </div>
-                        <h3 className="text-gray-700 font-medium text-lg">运行中的 GPU 进程</h3>
+                        <h3 className="text-gray-700 font-medium text-lg">运行中的Rocm GPU 进程</h3>
                     </div>
                     
                     <div className="flex items-center gap-2 text-sm text-gray-400">
