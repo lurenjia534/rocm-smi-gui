@@ -411,58 +411,102 @@ function MetricCard({
         return null
     })()
     
-    // 确定基于值的颜色
+    // 确定基于值的颜色及样式
     const getProgressColor = (val: number) => {
-        if (val > 80) return 'bg-gray-700' // 高负载用深灰
-        if (val > 50) return 'bg-gray-600' // 中负载用中灰
-        if (val > 20) return 'bg-gray-500' // 低负载用中浅灰
-        return 'bg-gray-400' // 很低负载用浅灰
+        if (val > 80) return 'bg-gradient-to-r from-gray-600 to-gray-700' // 高负载用深色渐变
+        if (val > 50) return 'bg-gradient-to-r from-gray-500 to-gray-600' // 中负载用中色渐变
+        if (val > 20) return 'bg-gradient-to-r from-gray-400 to-gray-500' // 低负载用中浅色渐变
+        return 'bg-gradient-to-r from-gray-300 to-gray-400' // 很低负载用浅色渐变
     }
-
+    
+    // 根据值类型设置不同风格
+    const isHighValue = numericValue !== null && numericValue > 75;
+    const isMediumValue = numericValue !== null && numericValue > 40 && numericValue <= 75;
+    
     return (
         <motion.div
-            className="
-                h-28 w-full rounded-xl p-5 
-                bg-white/90 shadow-md backdrop-blur-sm
-                transition-all duration-300 ease-out
-                flex items-center
-            "
+            className="w-full rounded-xl overflow-hidden backdrop-blur-sm"
             whileHover={{ 
-                scale: 1.02, 
-                boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
-                backgroundColor: 'rgba(255, 255, 255, 0.98)'
+                scale: 1.03, 
+                boxShadow: '0 8px 24px rgba(0,0,0,0.08)',
             }}
             transition={{ type: 'spring', stiffness: 400, damping: 17 }}
         >
-            {/* 左侧区域：图标和文字信息 */}
-            <div className="flex-1 flex items-center gap-4">
-                <div className="bg-gray-100 rounded-full p-3">
-                    <IconComponent className="h-6 w-6 text-gray-600" strokeWidth={1.5} />
-                </div>
-                <div className="flex flex-col">
-                    <span className="text-sm text-gray-500 leading-tight">{label}</span>
-                    <span className="text-xl font-medium text-gray-800 leading-tight mt-1">
-                        {displayValue}{displayUnit}
+            <div className="bg-white/90 shadow-md h-full p-5">
+                {/* 卡片顶部：指标标签和图标 */}
+                <div className="flex items-center justify-between mb-3">
+                    <span className="text-sm font-medium text-gray-500">
+                        {label}
                     </span>
-                </div>
-            </div>
-            
-            {/* 右侧区域：进度条 */}
-            {progressValue !== null && (
-                <div className="w-1/3 h-4 bg-gray-100 rounded-full overflow-hidden">
                     <motion.div 
-                        className={`h-full ${getProgressColor(progressValue)}`}
-                        initial={{ width: 0 }}
-                        animate={{ width: `${progressValue}%` }}
-                        transition={{ 
-                            type: 'spring', 
-                            stiffness: 120, 
-                            damping: 14,
-                            delay: 0.1
-                        }}
-                    />
+                        className={`rounded-full p-2 ${
+                            isHighValue ? 'bg-gray-100' : 
+                            isMediumValue ? 'bg-gray-50' : 'bg-gray-50'
+                        }`}
+                        whileHover={{ scale: 1.1, rotate: 5 }}
+                        transition={{ type: 'spring', stiffness: 300, damping: 10 }}
+                    >
+                        <IconComponent 
+                            className={`h-5 w-5 ${
+                                isHighValue ? 'text-gray-700' : 
+                                isMediumValue ? 'text-gray-600' : 'text-gray-500'
+                            }`} 
+                            strokeWidth={1.5} 
+                        />
+                    </motion.div>
                 </div>
-            )}
+                
+                {/* 卡片中部：值显示 */}
+                <div className="mt-2 mb-4">
+                    <div className="flex items-baseline">
+                        <motion.span 
+                            className={`text-2xl font-semibold ${
+                                isHighValue ? 'text-gray-800' :
+                                isMediumValue ? 'text-gray-700' : 'text-gray-800'
+                            }`}
+                            initial={{ opacity: 0, y: 5 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.3 }}
+                        >
+                            {displayValue}
+                        </motion.span>
+                        {displayUnit && (
+                            <span className="ml-1 text-sm text-gray-500">{displayUnit}</span>
+                        )}
+                    </div>
+                </div>
+                
+                {/* 卡片底部：进度条 */}
+                {progressValue !== null && (
+                    <div className="relative w-full h-2 bg-gray-100 rounded-full overflow-hidden mt-auto">
+                        <motion.div 
+                            className={`h-full ${getProgressColor(progressValue)}`}
+                            initial={{ width: 0 }}
+                            animate={{ width: `${progressValue}%` }}
+                            transition={{ 
+                                type: 'spring', 
+                                stiffness: 120, 
+                                damping: 14,
+                                delay: 0.1
+                            }}
+                        />
+                        {/* 进度条上的光效 */}
+                        {progressValue > 0 && (
+                            <motion.div 
+                                className="absolute top-0 h-full w-5 bg-white/30"
+                                initial={{ left: '-10%' }}
+                                animate={{ left: '110%' }}
+                                transition={{ 
+                                    repeat: Infinity, 
+                                    duration: 2, 
+                                    ease: "easeInOut", 
+                                    repeatDelay: 1
+                                }}
+                            />
+                        )}
+                    </div>
+                )}
+            </div>
         </motion.div>
     )
 }
@@ -509,6 +553,20 @@ function MetricsGrid({ device }: { device: NormalizedDevice }) {
         return String(rawValue);
     }
 
+    // 按类别分组指标
+    const temperatureMetrics = metrics.filter(m => 
+        m.key.includes('Temp') || m.label.includes('温度')
+    );
+    
+    const performanceMetrics = metrics.filter(m => 
+        m.key.includes('Util') || m.label.includes('利用率') || 
+        m.key === 'gpuUtil' || m.key === 'vramUtil' || m.key === 'vramUsed'
+    );
+    
+    const otherMetrics = metrics.filter(m => 
+        !temperatureMetrics.includes(m) && !performanceMetrics.includes(m)
+    );
+
     return (
         <motion.div 
             className="w-full max-w-7xl mx-auto pt-32 pb-8 px-6 md:pl-24"
@@ -516,49 +574,165 @@ function MetricsGrid({ device }: { device: NormalizedDevice }) {
             animate={{ opacity: 1 }}
             transition={{ duration: 0.5 }}
         >
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {metrics.map((metric, index) => {
-                    const formattedValue = formatValue(metric);
-                    // 只为显存占用特殊处理单位
-                    const unit = metric.key === 'vramUsed' ? undefined : metric.unit;
+            {/* 标题区域 */}
+            <motion.div 
+                className="mb-8 flex items-center gap-3"
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: 0.2 }}
+            >
+                <div className="bg-white/90 rounded-full p-3 shadow-sm">
+                    <Icon.BarChart3 className="h-6 w-6 text-gray-600" strokeWidth={1.5} />
+                </div>
+                <div>
+                    <h2 className="text-xl font-medium text-gray-800">GPU 性能指标</h2>
+                    <p className="text-sm text-gray-500 mt-0.5">实时监控关键硬件参数</p>
+                </div>
+                <motion.div 
+                    className="ml-auto flex items-center gap-1.5 bg-gray-50/80 px-3 py-1 rounded-full"
+                    animate={{ scale: [1, 1.05, 1] }}
+                    transition={{ duration: 3, repeat: Infinity }}
+                >
+                    <span className="w-2 h-2 rounded-full bg-gray-400"></span>
+                    <span className="text-xs text-gray-500">实时数据</span>
+                </motion.div>
+            </motion.div>
+            
+            {/* 性能指标区域 */}
+            <motion.div 
+                className="mb-8"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.5, delay: 0.1 }}
+            >
+                <div className="mb-3 ml-1 flex items-center">
+                    <div className="w-1 h-5 bg-gray-700 rounded-full mr-2"></div>
+                    <h3 className="text-gray-700 font-medium">性能与利用率</h3>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {performanceMetrics.map((metric, index) => {
+                        const formattedValue = formatValue(metric);
+                        const unit = metric.key === 'vramUsed' ? undefined : metric.unit;
 
-                    return (
-                        <motion.div
-                            key={metric.key}
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ 
-                                duration: 0.4, 
-                                delay: index * 0.05, 
-                                type: 'spring',
-                                stiffness: 100,
-                                damping: 15
-                            }}
-                        >
-                            <MetricCard
-                                icon={metric.icon}
-                                label={metric.label}
-                                value={formattedValue}
-                                unit={unit}
-                            />
-                        </motion.div>
-                    )
-                })}
-            </div>
+                        return (
+                            <motion.div
+                                key={metric.key}
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ 
+                                    duration: 0.4, 
+                                    delay: index * 0.05, 
+                                    type: 'spring',
+                                    stiffness: 120,
+                                    damping: 15
+                                }}
+                            >
+                                <MetricCard
+                                    icon={metric.icon}
+                                    label={metric.label}
+                                    value={formattedValue}
+                                    unit={unit}
+                                />
+                            </motion.div>
+                        )
+                    })}
+                </div>
+            </motion.div>
+            
+            {/* 温度指标区域 */}
+            <motion.div 
+                className="mb-8"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.5, delay: 0.2 }}
+            >
+                <div className="mb-3 ml-1 flex items-center">
+                    <div className="w-1 h-5 bg-gray-700 rounded-full mr-2"></div>
+                    <h3 className="text-gray-700 font-medium">温度监控</h3>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {temperatureMetrics.map((metric, index) => {
+                        const formattedValue = formatValue(metric);
+                        const unit = metric.unit;
+
+                        return (
+                            <motion.div
+                                key={metric.key}
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ 
+                                    duration: 0.4, 
+                                    delay: 0.2 + index * 0.05, 
+                                    type: 'spring',
+                                    stiffness: 120,
+                                    damping: 15
+                                }}
+                            >
+                                <MetricCard
+                                    icon={metric.icon}
+                                    label={metric.label}
+                                    value={formattedValue}
+                                    unit={unit}
+                                />
+                            </motion.div>
+                        )
+                    })}
+                </div>
+            </motion.div>
+            
+            {/* 其他指标区域 */}
+            <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.5, delay: 0.3 }}
+            >
+                <div className="mb-3 ml-1 flex items-center">
+                    <div className="w-1 h-5 bg-gray-700 rounded-full mr-2"></div>
+                    <h3 className="text-gray-700 font-medium">其他参数</h3>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {otherMetrics.map((metric, index) => {
+                        const formattedValue = formatValue(metric);
+                        const unit = metric.unit;
+
+                        return (
+                            <motion.div
+                                key={metric.key}
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ 
+                                    duration: 0.4, 
+                                    delay: 0.3 + index * 0.05, 
+                                    type: 'spring',
+                                    stiffness: 120,
+                                    damping: 15
+                                }}
+                            >
+                                <MetricCard
+                                    icon={metric.icon}
+                                    label={metric.label}
+                                    value={formattedValue}
+                                    unit={unit}
+                                />
+                            </motion.div>
+                        )
+                    })}
+                </div>
+            </motion.div>
         </motion.div>
     )
 }
 
 
-/* ---------- UI Component: Top Controls (Monochrome Style) ---------- */
+/* ---------- UI Component: Top Controls (Modern Style) ---------- */
 function TopControls({
-                         devices,
-                         selectedIndex,
-                         onPrev,
-                         onNext,
-                         onSelect,
-                         rocmVer,
-                     }: {
+                        devices,
+                        selectedIndex,
+                        onPrev,
+                        onNext,
+                        onSelect,
+                        rocmVer,
+                    }: {
     devices: RawDevice[]
     selectedIndex: number
     onPrev: () => void
@@ -569,97 +743,195 @@ function TopControls({
     const selectedDevice = normalize(devices[selectedIndex]);
     const deviceCount = devices.length;
     const kind = selectedDevice.kind;
+    
+    // 获取当前设备的其他关键信息
+    const gfxVersion = selectedDevice.gfx;
+    const vendor = selectedDevice.vendor;
+    
+    // GPU类型图标
+    const renderDeviceIcon = () => {
+        const isDiscrete = kind === 'Discrete';
+        return (
+            <div className={`rounded-full p-2 ${isDiscrete ? 'bg-gray-100' : 'bg-gray-50'}`}>
+                {isDiscrete ? (
+                    <Icon.Cpu className="h-5 w-5 text-gray-700" strokeWidth={1.5} />
+                ) : (
+                    <Icon.Microchip className="h-5 w-5 text-gray-600" strokeWidth={1.5} />
+                )}
+            </div>
+        );
+    };
 
     return (
         <motion.div 
-            className="absolute top-0 md:left-20 left-0 right-0 h-20 px-6 bg-white/95 backdrop-blur-sm flex items-center justify-between z-10 shadow-sm"
-            initial={{ opacity: 0, y: -10 }}
+            className="absolute top-0 md:left-20 left-0 right-0 h-24 md:h-20 px-6 bg-white/95 backdrop-blur-lg flex items-center justify-between z-10 shadow-md border-b border-gray-100"
+            initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, type: 'spring', stiffness: 100 }}
+            transition={{ duration: 0.5, type: 'spring', stiffness: 100, damping: 20 }}
         >
             <div className="flex items-center gap-4">
-                <div className="flex gap-2">
+                {/* GPU导航按钮组 */}
+                <motion.div 
+                    className="flex gap-2"
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: 0.2 }}
+                >
                     <motion.button
                         onClick={onPrev}
                         disabled={deviceCount <= 1}
-                        className="rounded-full bg-white/80 shadow-sm p-2.5 text-gray-600 hover:bg-gray-50 hover:text-gray-900 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-                        aria-label="Previous GPU"
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        transition={{ type: 'spring', stiffness: 400, damping: 17 }}
+                        className="rounded-full bg-white shadow-md p-2.5 text-gray-600 hover:bg-gray-50 hover:text-gray-900 disabled:opacity-40 disabled:cursor-not-allowed transition-all border border-gray-100 hover:border-gray-200"
+                        aria-label="上一个GPU"
+                        whileHover={{ scale: 1.08, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                        whileTap={{ scale: 0.92 }}
+                        transition={{ type: 'spring', stiffness: 400, damping: 15 }}
                     >
-                        <Icon.ChevronLeft className="h-5 w-5" />
+                        <Icon.ChevronLeft className="h-5 w-5" strokeWidth={2} />
                     </motion.button>
                     <motion.button
                         onClick={onNext}
                         disabled={deviceCount <= 1}
-                        className="rounded-full bg-white/80 shadow-sm p-2.5 text-gray-600 hover:bg-gray-50 hover:text-gray-900 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-                        aria-label="Next GPU"
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        transition={{ type: 'spring', stiffness: 400, damping: 17 }}
+                        className="rounded-full bg-white shadow-md p-2.5 text-gray-600 hover:bg-gray-50 hover:text-gray-900 disabled:opacity-40 disabled:cursor-not-allowed transition-all border border-gray-100 hover:border-gray-200"
+                        aria-label="下一个GPU"
+                        whileHover={{ scale: 1.08, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                        whileTap={{ scale: 0.92 }}
+                        transition={{ type: 'spring', stiffness: 400, damping: 15 }}
                     >
-                        <Icon.ChevronRight className="h-5 w-5" />
+                        <Icon.ChevronRight className="h-5 w-5" strokeWidth={2} />
                     </motion.button>
-                </div>
+                </motion.div>
                 
-                <div className="flex flex-col items-start pl-1">
+                {/* GPU信息区域 */}
+                <motion.div 
+                    className="flex flex-col items-start pl-1"
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.3, duration: 0.4 }}
+                >
                     <div className="flex items-center gap-2">
-                        <h1 className="text-lg font-medium text-gray-900">
-                            {selectedDevice.name}
-                        </h1>
+                        <div className="flex items-center">
+                            {renderDeviceIcon()}
+                            <h1 className="text-lg font-medium text-gray-900 ml-2 mr-1.5">
+                                {selectedDevice.name}
+                            </h1>
+                        </div>
                         {kind && (
-                            <span className="px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-700 rounded-full">
+                            <motion.span 
+                                className="px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-700 rounded-full border border-gray-200"
+                                initial={{ opacity: 0, scale: 0.8 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                transition={{ delay: 0.4 }}
+                            >
                                 {kind}
+                            </motion.span>
+                        )}
+                    </div>
+                    
+                    <div className="flex items-center text-sm text-gray-500 mt-1">
+                        <span className="font-medium mr-2">
+                            GPU {selectedIndex + 1} / {deviceCount}
+                        </span>
+                        
+                        {gfxVersion && (
+                            <span className="flex items-center text-xs">
+                                <span className="h-3 w-px bg-gray-200 mx-1.5"></span>
+                                <Icon.Tag className="h-3 w-3 mr-1" />
+                                <span>{gfxVersion}</span>
+                            </span>
+                        )}
+                        
+                        {selectedDevice.subsystem && (
+                            <span className="flex items-center text-xs ml-1.5">
+                                <span className="h-3 w-px bg-gray-200 mx-1.5"></span>
+                                <span className="opacity-75">{selectedDevice.subsystem}</span>
                             </span>
                         )}
                     </div>
-                    <span className="text-sm text-gray-500 mt-0.5">
-                        GPU {selectedIndex + 1} / {deviceCount}
-                        {selectedDevice.subsystem && ` · ${selectedDevice.subsystem}`}
-                    </span>
-                </div>
+                </motion.div>
             </div>
             
             <div className="flex items-center gap-5">
-                <div className="relative">
-                    <select
-                        value={selectedIndex}
-                        onChange={(e) => onSelect(parseInt(e.target.value, 10))}
-                        disabled={deviceCount <= 1}
-                        className="
-                            appearance-none rounded-lg bg-white/80 shadow-sm py-2 pl-4 pr-10
-                            text-sm text-gray-700 hover:text-gray-900 cursor-pointer 
-                            focus:ring-2 focus:ring-gray-200 focus:outline-none
-                            disabled:opacity-40 disabled:cursor-not-allowed
-                            transition-all duration-200
-                        "
-                        aria-label="Select GPU"
-                    >
-                        {devices.map((d, i) => (
-                            <option key={i} value={i} className="text-gray-800 py-1">
-                                {normalize(d).name ?? `Device ${i + 1}`}
-                            </option>
-                        ))}
-                    </select>
-                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500">
-                        <Icon.ChevronDown className="h-4 w-4" />
+                {/* GPU选择器 */}
+                <motion.div 
+                    className="relative"
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: 0.4 }}
+                    whileHover={{ scale: deviceCount <= 1 ? 1 : 1.03 }}
+                >
+                    <div className="relative">
+                        <select
+                            value={selectedIndex}
+                            onChange={(e) => onSelect(parseInt(e.target.value, 10))}
+                            disabled={deviceCount <= 1}
+                            className="
+                                appearance-none rounded-lg bg-white shadow-md py-2.5 pl-4 pr-12
+                                text-sm text-gray-700 hover:text-gray-900 cursor-pointer 
+                                focus:ring-2 focus:ring-gray-200 focus:outline-none
+                                disabled:opacity-40 disabled:cursor-not-allowed
+                                transition-all duration-200 border border-gray-100
+                            "
+                            aria-label="选择GPU"
+                        >
+                            {devices.map((d, i) => (
+                                <option key={i} value={i} className="text-gray-800 py-1.5">
+                                    {normalize(d).name ?? `设备 ${i + 1}`}
+                                </option>
+                            ))}
+                        </select>
+                        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500">
+                            <Icon.ChevronDown className="h-4 w-4" />
+                        </div>
                     </div>
-                </div>
+                    {deviceCount > 1 && (
+                        <motion.div 
+                            className="absolute -top-1.5 -right-1.5 bg-gray-700 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center"
+                            initial={{ scale: 0 }}
+                            animate={{ scale: 1 }}
+                            transition={{ 
+                                delay: 0.6, 
+                                type: 'spring',
+                                stiffness: 300, 
+                                damping: 15 
+                            }}
+                        >
+                            {deviceCount}
+                        </motion.div>
+                    )}
+                </motion.div>
                 
+                {/* ROCm 版本信息 */}
                 {rocmVer && (
                     <motion.div 
-                        className="hidden sm:flex flex-col items-end"
+                        className="hidden sm:flex items-center gap-3 px-3 py-1.5 bg-white/80 rounded-lg shadow-sm border border-gray-100"
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
-                        transition={{ delay: 0.3 }}
+                        transition={{ delay: 0.5 }}
+                        whileHover={{ scale: 1.03, backgroundColor: 'rgba(255, 255, 255, 0.95)' }}
                     >
-                        <span className="text-sm font-medium text-gray-700">ROCm</span>
-                        <div className="flex items-center gap-2 text-xs text-gray-500">
-                            <span>SMI {rocmVer.smi}</span>
-                            <span className="h-3 w-px bg-gray-300"></span>
-                            <span>LIB {rocmVer.lib}</span>
+                        <div className="flex items-center">
+                            <Icon.Layers className="h-4 w-4 text-gray-500 mr-1.5" strokeWidth={1.5} />
+                            <span className="text-sm font-medium text-gray-700">ROCm</span>
                         </div>
+                        
+                        <div className="flex items-center gap-2 text-xs bg-gray-50 px-2 py-1 rounded-md">
+                            <span className="text-gray-600">SMI <span className="font-mono">{rocmVer.smi}</span></span>
+                            <span className="h-3 w-px bg-gray-300"></span>
+                            <span className="text-gray-600">LIB <span className="font-mono">{rocmVer.lib}</span></span>
+                        </div>
+                        
+                        <motion.div 
+                            className="w-2 h-2 rounded-full bg-green-400"
+                            animate={{ 
+                                scale: [1, 1.2, 1],
+                                opacity: [1, 0.7, 1] 
+                            }}
+                            transition={{ 
+                                duration: 2,
+                                repeat: Infinity,
+                                repeatType: "loop"
+                            }}
+                        />
                     </motion.div>
                 )}
             </div>
