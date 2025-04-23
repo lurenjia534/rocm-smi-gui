@@ -1,14 +1,10 @@
 "use client";
 
-// GPU Dashboard Sidebar – simplified (light‑theme only)
-// Removed ThemeContext, dark‑mode conditionals, and theme toggle button.
-// Added enhanced NavItem hover effects as requested.
-
 import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Menu, X, Home, Gauge, Thermometer, Activity, Info } from "lucide-react";
+import { Menu, X, Home, Gauge, Thermometer, Activity, Info, Layers, ChevronRight } from "lucide-react";
 
 // -----------------------------------------------------------------------------
 // Types
@@ -16,8 +12,8 @@ import { Menu, X, Home, Gauge, Thermometer, Activity, Info } from "lucide-react"
 interface NavItemMeta {
     name: string;
     href: string;
-    icon: React.ReactNode;
-    group: "Metrics" | "Info";
+    icon: React.ElementType;
+    group: "指标" | "信息";
 }
 
 // -----------------------------------------------------------------------------
@@ -41,10 +37,9 @@ function useMediaQuery(query: string) {
 // -----------------------------------------------------------------------------
 export default function Sidebar() {
     const pathname = usePathname();
-
     const isDesktop = useMediaQuery("(min-width: 768px)");
-    const [sidebarOpen, setSidebarOpen] = useState(false); // mobile drawer toggle
-    const [isHovered, setIsHovered] = useState(false); // desktop hover‑expand
+    const [sidebarOpen, setSidebarOpen] = useState(false);
+    const [isHovered, setIsHovered] = useState(false);
 
     // close mobile drawer on route change
     useEffect(() => {
@@ -53,88 +48,120 @@ export default function Sidebar() {
 
     // nav definitions
     const navItems: NavItemMeta[] = [
-        { name: "概览", href: "/overview", icon: <Home size={20} />, group: "Metrics" },
-        { name: "使用率和显存使用率", href: "/utilization", icon: <Gauge size={20} />, group: "Metrics" },
-        { name: "温度", href: "/temperature", icon: <Thermometer size={20} />, group: "Metrics" },
-        { name: "功耗与频率", href: "/power", icon: <Activity size={20} />, group: "Metrics" },
-        { name: "关于", href: "/about", icon: <Info size={20} />, group: "Info" }
+        { name: "概览", href: "/overview", icon: Home, group: "指标" },
+        { name: "使用率和显存", href: "/utilization", icon: Gauge, group: "指标" },
+        { name: "温度监控", href: "/temperature", icon: Thermometer, group: "指标" },
+        { name: "功耗与频率", href: "/power", icon: Activity, group: "指标" },
+        { name: "关于", href: "/about", icon: Info, group: "信息" }
     ];
 
-    // memoized active index for indicator (not strictly needed for visuals here but kept for context)
+    // memoized active index
     const activeIndex = useMemo(
         () => navItems.findIndex((n) => pathname === n.href || pathname.startsWith(n.href)),
-        [pathname, navItems] // Added navItems dependency
+        [pathname, navItems]
     );
 
+    // grouped nav items
     const grouped = useMemo(
-        () => ({ Metrics: navItems.filter((n) => n.group === "Metrics"), Info: navItems.filter((n) => n.group === "Info") }),
-        [navItems] // Added navItems dependency
+        () => ({
+            "指标": navItems.filter((n) => n.group === "指标"),
+            "信息": navItems.filter((n) => n.group === "信息")
+        }),
+        [navItems]
     );
 
     // ---------------------------------------------------------------------------
     // Animation variants
     // ---------------------------------------------------------------------------
     const sidebarVariants = {
-        closed: { x: "-100%", opacity: 0, transition: { type: "spring", stiffness: 400, damping: 45 } },
-        open: { x: 0, opacity: 1, transition: { type: "spring", stiffness: 80, damping: 18 } }
-    } as const;
+        closed: { x: "-100%", opacity: 0, transition: { type: "spring", stiffness: 300, damping: 30 } },
+        open: { x: 0, opacity: 1, transition: { type: "spring", stiffness: 80, damping: 20 } }
+    };
 
-    const listVariants = { hidden: {}, show: { transition: { staggerChildren: 0.06, delayChildren: 0.12 } } } as const;
+    const listVariants = {
+        hidden: { opacity: 0 },
+        show: { 
+            opacity: 1,
+            transition: { staggerChildren: 0.07, delayChildren: 0.1 } 
+        }
+    };
 
     const itemVariants = {
-        hidden: { opacity: 0, x: -28 },
-        show: { opacity: 1, x: 0, transition: { type: "spring", stiffness: 230, damping: 23 } }
-    } as const;
+        hidden: { opacity: 0, x: -15, y: 5 },
+        show: { 
+            opacity: 1, 
+            x: 0, 
+            y: 0,
+            transition: { type: "spring", stiffness: 250, damping: 20 } 
+        }
+    };
 
     // ---------------------------------------------------------------------------
     // Helpers
     // ---------------------------------------------------------------------------
-    function NavItem({ meta }: { meta: NavItemMeta }) {
-        const active = pathname === meta.href || pathname.startsWith(meta.href);
+    function NavItem({ item }: { item: NavItemMeta }) {
+        const Icon = item.icon;
+        const active = pathname === item.href || pathname.startsWith(item.href);
+        
         return (
-            // 1. Added whileHover to the outer motion.div
-            <motion.div
-                variants={itemVariants}
-                whileHover={{ scale: 1.02 }} // Apply slight scale-up on hover to the whole item
-            >
-                <Link
-                    href={meta.href}
-                    // 2. Updated className for enhanced hover background/shadow/ring on non-active items
-                    className={`
-                      group/item relative flex h-12 items-center gap-4 rounded-xl px-6 py-3
-                      transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)]
-                      select-none
-                      ${active
-                        ? 'bg-gradient-to-r from-gray-200/80 via-gray-100/60 to-gray-200/40 text-gray-900'
-                        : 'text-gray-600 hover:text-gray-900 hover:bg-gradient-to-r hover:from-white/60 hover:to-gray-100/30 hover:shadow-lg hover:ring-1 hover:ring-gray-200'
-                    }
-                    `}
-                >
-                    {active && <span className="absolute left-0 top-1/2 -translate-y-1/2 h-2/3 w-1 rounded-full bg-gray-700 opacity-60" />}
-
-                    {/* 3. Added animate and whileHover to the icon span */}
-                    <motion.span
-                        className="z-10" // Simplified base class, removed group-hover styles
-                        animate={active ? { scale: 1.15, rotate: -6 } : {}}
-                        whileHover={!active ? { scale: 1.2, rotate: -4, color: '#0f172a' } : {}}
-                        transition={{ duration: 0.2 }} // Add a small transition for smoothness
-                    >
-                        {meta.icon}
-                    </motion.span>
-
-                    {/* 4. Added whileHover to the text span and adjusted className */}
-                    <motion.span
+            <motion.div variants={itemVariants}>
+                <Link href={item.href}>
+                    <motion.div
                         className={`
-                            whitespace-nowrap text-[0.95rem] font-medium tracking-wide
+                            flex items-center px-4 py-3 my-1 rounded-xl
                             transition-all duration-300
-                            ${isHovered ? 'opacity-100' : 'opacity-0'} // Simplified: relies on sidebar hover state for visibility
-                            ${active ? 'text-gray-800' : ''}
-                         `}
-                        whileHover={!active ? { x: 4, color: '#0f172a' } : {}}
-                        transition={{ duration: 0.2 }} // Add a small transition for smoothness
+                            ${active 
+                                ? 'bg-gray-100/80 text-gray-900' 
+                                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                            }
+                        `}
+                        whileHover={{ 
+                            x: 4,
+                            transition: { type: "spring", stiffness: 400, damping: 25 }
+                        }}
+                        whileTap={{ scale: 0.98 }}
                     >
-                        {meta.name}
-                    </motion.span>
+                        <div className={`
+                            flex items-center justify-center w-10 h-10 rounded-lg
+                            ${active 
+                                ? 'bg-white text-gray-900 shadow-sm' 
+                                : 'text-gray-600 bg-transparent'
+                            }
+                        `}>
+                            <Icon 
+                                size={active ? 20 : 18} 
+                                strokeWidth={active ? 2 : 1.5} 
+                                className={active ? "text-gray-800" : "text-gray-500"}
+                            />
+                        </div>
+                        
+                        <div className={`
+                            ml-3
+                            transition-all duration-300 ease-out
+                            ${isHovered ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-6'}
+                            ${isDesktop ? '' : 'opacity-100 translate-x-0'}
+                        `}>
+                            <span className="font-medium tracking-wide text-[0.95rem]">
+                                {item.name}
+                            </span>
+                        </div>
+                        
+                        {active && (
+                            <motion.div
+                                className={`
+                                    ml-auto mr-2
+                                    transition-all duration-300 ease-out
+                                    ${isHovered ? 'opacity-100' : 'opacity-0'}
+                                    ${isDesktop ? '' : 'opacity-100'}
+                                `}
+                                initial={{ scale: 0.8, opacity: 0 }}
+                                animate={{ scale: 1, opacity: 1 }}
+                                transition={{ delay: 0.2 }}
+                            >
+                                <ChevronRight size={16} className="text-gray-500" />
+                            </motion.div>
+                        )}
+                    </motion.div>
                 </Link>
             </motion.div>
         );
@@ -144,15 +171,23 @@ export default function Sidebar() {
         return (
             <div className="mb-6">
                 <h2
-                    className={`mb-2 px-6 text-xs font-medium uppercase tracking-wider text-gray-500 transition-all duration-500 ${
-                        isHovered ? "opacity-100 translate-x-0" : "opacity-0 -translate-x-8"
-                    }`}
+                    className={`
+                        px-5 pt-2 pb-2 text-xs font-medium text-gray-400
+                        transition-all duration-500 ease-out
+                        ${isHovered ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-4'}
+                        ${isDesktop ? '' : 'opacity-100 translate-x-0'}
+                    `}
                 >
                     {title}
                 </h2>
-                <motion.div variants={listVariants} initial="hidden" animate="show" className="space-y-1.5">
-                    {items.map((it) => (
-                        <NavItem key={it.href} meta={it} />
+                <motion.div 
+                    variants={listVariants} 
+                    initial="hidden" 
+                    animate="show" 
+                    className="space-y-1 px-2"
+                >
+                    {items.map((item) => (
+                        <NavItem key={item.href} item={item} />
                     ))}
                 </motion.div>
             </div>
@@ -164,12 +199,16 @@ export default function Sidebar() {
     // ---------------------------------------------------------------------------
     return (
         <>
-            {/* Mobile toggle */}
+            {/* Mobile toggle button */}
             <motion.button
-                className="fixed top-4 left-4 z-50 flex h-10 w-10 items-center justify-center rounded-full border bg-white/90 text-gray-700 backdrop-blur shadow-lg md:hidden border-gray-200/50 transition-all duration-300 hover:scale-105 active:scale-95"
-                whileTap={{ scale: 0.9 }}
+                className="fixed top-4 left-4 z-50 flex h-11 w-11 items-center justify-center rounded-full bg-white text-gray-700 shadow-md md:hidden"
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
                 onClick={() => setSidebarOpen((o) => !o)}
                 aria-label="Toggle menu"
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2 }}
             >
                 {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
             </motion.button>
@@ -185,28 +224,41 @@ export default function Sidebar() {
                         variants={sidebarVariants}
                         onMouseEnter={() => isDesktop && setIsHovered(true)}
                         onMouseLeave={() => isDesktop && setIsHovered(false)}
-                        className={`fixed left-6 top-1/2 z-40 flex h-[85vh] -translate-y-1/2 flex-col overflow-hidden rounded-2xl border bg-gradient-to-b from-white/95 via-gray-100/95 to-white/95 border-gray-200/90 backdrop-blur shadow-[0_0_60px_-15px_rgba(0,0,0,0.15)] transition-all duration-500 ${
-                            isHovered ? "w-72" : "w-24" // Width transition based on hover
-                        }`}
+                        className={`
+                            fixed left-0 top-0 z-40 h-full
+                            flex flex-col bg-white shadow-xl
+                            transition-all duration-500 ease-in-out
+                            ${isDesktop 
+                                ? isHovered ? 'w-64' : 'w-20'
+                                : 'w-72'
+                            }
+                        `}
                     >
-                        {/* Logo */}
-                        <Link href="/overview" className="mb-10 flex items-center px-6 pt-10">
-                            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gray-200 transition-all duration-500">
-                                <Home size={24} className="text-gray-600" />
+                        {/* Logo area */}
+                        <div className="flex items-center px-5 py-8">
+                            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gray-100">
+                                <Layers size={22} className="text-gray-700" />
                             </div>
-                            <span
-                                className={`ml-3 text-lg font-medium tracking-wide text-gray-800 transition-all duration-500 ${
-                                    isHovered ? "opacity-100" : "opacity-0 -translate-x-10" // Text visibility based on hover
-                                }`}
-                            >
-                                GPU 仪表板
-                            </span>
-                        </Link>
+                            <div className={`
+                                ml-4
+                                transition-all duration-500 ease-out
+                                ${isHovered ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-10'}
+                                ${isDesktop ? '' : 'opacity-100 translate-x-0'}
+                            `}>
+                                <h1 className="text-xl font-semibold text-gray-800">
+                                    GPU 仪表板
+                                </h1>
+                            </div>
+                        </div>
 
-                        {/* Nav groups */}
-                        <div className="flex-1 overflow-y-auto px-1 pb-6">
-                            <NavGroup title="Metrics" items={grouped.Metrics} />
-                            <NavGroup title="Info" items={grouped.Info} />
+                        {/* Divider */}
+                        <div className="my-1 border-t border-gray-100 mx-4"></div>
+
+                        {/* Navigation menu */}
+                        <div className="flex-1 overflow-y-auto pt-2 pb-6 px-2">
+                            {Object.entries(grouped).map(([title, items]) => (
+                                <NavGroup key={title} title={title} items={items} />
+                            ))}
                         </div>
                     </motion.nav>
                 )}
@@ -216,7 +268,7 @@ export default function Sidebar() {
             <AnimatePresence>
                 {sidebarOpen && !isDesktop && (
                     <motion.div
-                        className="fixed inset-0 z-30 bg-black/40 backdrop-blur-sm"
+                        className="fixed inset-0 z-30 bg-black/30 backdrop-blur-[2px]"
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
