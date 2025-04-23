@@ -17,6 +17,14 @@ type MetricDefinition = {
     unit?: string
     precision?: number
 }
+type RocmPid = {
+    pid: number
+    name: string
+    gpu_index: number
+    vram_bytes: number
+    engine_usage: number
+    state: string
+}
 
 /* ---------- Data Normalization (Remains the same) ---------- */
 function normalize(d: RawDevice | null | undefined) {
@@ -47,7 +55,70 @@ function normalize(d: RawDevice | null | undefined) {
 }
 
 
-/* ---------- UI Component: Metric Card (Monochrome Style) ---------- */
+/* ---------- ★ 新组件：ProcessTable ---------- */
+function ProcessTable({ procs }: { procs: RocmPid[] }) {
+    if (procs.length === 0) return null
+    return (
+        <motion.div 
+            className="w-full max-w-7xl mx-auto px-4 pb-10 overflow-x-auto"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+        >
+            <div className="rounded-xl bg-white/90 shadow-lg p-5 backdrop-blur-sm">
+                <h3 className="text-gray-700 font-medium text-lg mb-4">运行中的 GPU 进程</h3>
+                <div className="overflow-hidden">
+                    <table className="min-w-full text-sm">
+                        <thead className="bg-transparent text-gray-500">
+                        <tr>
+                            <th className="px-3 py-3 text-left font-medium">PID</th>
+                            <th className="px-3 py-3 text-left font-medium">进程</th>
+                            <th className="px-3 py-3 text-right font-medium">GPU</th>
+                            <th className="px-3 py-3 text-right font-medium">显存&nbsp;MB</th>
+                            <th className="px-3 py-3 text-right font-medium">引擎&nbsp;%</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        {procs.map((p, index) => (
+                            <motion.tr 
+                                key={p.pid} 
+                                className="hover:bg-gray-50/80"
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ 
+                                    duration: 0.3, 
+                                    delay: index * 0.05,
+                                    type: 'spring',
+                                    stiffness: 120,
+                                    damping: 20
+                                }}
+                            >
+                                <td className="px-3 py-3 text-gray-700">{p.pid}</td>
+                                <td className="px-3 py-3 text-gray-800 font-medium">{p.name}</td>
+                                <td className="px-3 py-3 text-right text-gray-700">{p.gpu_index}</td>
+                                <td className="px-3 py-3 text-right text-gray-700">
+                                    <span className="font-medium">{(p.vram_bytes / 1_048_576).toFixed(1)}</span>
+                                </td>
+                                <td className="px-3 py-3 text-right">
+                                    <span className={`px-2 py-1 rounded-lg text-xs ${
+                                        p.engine_usage > 70 ? 'bg-gray-200 text-gray-800' : 
+                                        p.engine_usage > 30 ? 'bg-gray-100 text-gray-700' : 
+                                        'bg-gray-50 text-gray-600'
+                                    }`}>
+                                        {p.engine_usage}
+                                    </span>
+                                </td>
+                            </motion.tr>
+                        ))}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </motion.div>
+    )
+}
+
+/* ---------- UI Component: Metric Card (Modern Style) ---------- */
 function MetricCard({
                         icon: IconComponent,
                         label,
@@ -61,22 +132,188 @@ function MetricCard({
 }) {
     const displayValue = value ?? '--'
     const displayUnit = value !== null && value !== undefined && unit ? ` ${unit}` : ''
+    
+    // 处理数值
+    const numericValue = (() => {
+        // 如果值是数字，直接使用
+        if (typeof value === 'number') return value
+        
+        // 如果值是字符串但可以解析为数字
+        if (typeof value === 'string') {
+            // 处理可能的百分比格式 (如 "75%")
+            const cleanValue = value.replace('%', '').trim()
+            const parsed = parseFloat(cleanValue)
+            if (!isNaN(parsed)) return parsed
+        }
+        
+        return null
+    })()
+    
+    // 确定是否显示进度条
+    const showProgress = (() => {
+        // 单位为%的数值一定显示进度条
+        if (unit === '%' && numericValue !== null) return true
+        
+        // GPU和VRAM利用率的关键词检查
+        if (label.includes('利用率') && numericValue !== null) return true
+        
+        // 处理"XX / YY MB (ZZ%)"格式的显存占用
+        if (typeof value === 'string' && value.includes('%')) {
+            const match = value.match(/\((\d+)%\)/)
+            if (match && match[1]) return true
+        }
+        
+        return false
+    })()
+    
+    // 获取进度值 (0-100)
+    const progressValue = (() => {
+        if (!showProgress) return null
+        
+        // 直接是百分比的情况
+        if (unit === '%' && numericValue !== null) {
+            return Math.min(Math.max(numericValue, 0), 100)
+        }
+        
+        // 从字符串提取百分比
+        if (typeof value === 'string') {
+            const match = value.match(/\((\d+)%\)/)
+            if (match && match[1]) {
+                return Math.min(Math.max(parseFloat(match[1]), 0), 100)
+            }
+        }
+        
+        // 针对其他利用率，考虑是0-1.0范围的情况
+        if (label.includes('利用率') && numericValue !== null) {
+            if (numericValue <= 1) return numericValue * 100
+            return Math.min(Math.max(numericValue, 0), 100)
+        }
+        
+        return null
+    })()
+    
+    // 确定基于值的颜色
+    const getProgressColor = (val: number) => {
+        if (val > 80) return 'bg-gray-700' // 高负载用深灰
+        if (val > 50) return 'bg-gray-600' // 中负载用中灰
+        if (val > 20) return 'bg-gray-500' // 低负载用中浅灰
+        return 'bg-gray-400' // 很低负载用浅灰
+    }
 
     return (
         <motion.div
             className="
-                h-20 w-full rounded-lg p-3 flex flex-col items-center justify-center gap-1
-                bg-white border border-gray-200 shadow-sm
-                transition-colors duration-200 ease-in-out
+                h-20 w-full rounded-xl p-4 
+                bg-white/90 shadow-md backdrop-blur-sm
+                transition-all duration-300 ease-out
+                flex items-center
             "
-            whileHover={{ scale: 1.03, borderColor: 'rgb(209 213 219)' /* gray-300 */, boxShadow: '0 2px 4px rgba(0,0,0,0.04)'}}
+            whileHover={{ 
+                scale: 1.02, 
+                boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
+                backgroundColor: 'rgba(255, 255, 255, 0.98)'
+            }}
             transition={{ type: 'spring', stiffness: 400, damping: 17 }}
         >
-            <IconComponent className="h-5 w-5 text-gray-400 mb-0.5" strokeWidth={1.5} />
-            <span className="text-xs text-gray-500 text-center leading-tight">{label}</span>
-            <span className={`text-base font-semibold text-gray-800 leading-tight`}>
-                {displayValue}{displayUnit}
-            </span>
+            {/* 左侧区域：图标和文字信息 */}
+            <div className="flex-1 flex items-center gap-3">
+                <div className="bg-gray-100 rounded-full p-2">
+                    <IconComponent className="h-5 w-5 text-gray-600" strokeWidth={1.5} />
+                </div>
+                <div className="flex flex-col">
+                    <span className="text-xs text-gray-500 leading-tight">{label}</span>
+                    <span className="text-base font-medium text-gray-800 leading-tight">
+                        {displayValue}{displayUnit}
+                    </span>
+                </div>
+            </div>
+            
+            {/* 右侧区域：进度条 */}
+            {progressValue !== null && (
+                <div className="w-1/3 h-3 bg-gray-100 rounded-full overflow-hidden">
+                    <motion.div 
+                        className={`h-full ${getProgressColor(progressValue)}`}
+                        initial={{ width: 0 }}
+                        animate={{ width: `${progressValue}%` }}
+                        transition={{ 
+                            type: 'spring', 
+                            stiffness: 120, 
+                            damping: 14,
+                            delay: 0.1
+                        }}
+                    />
+                </div>
+            )}
+        </motion.div>
+    )
+}
+
+/* ---------- UI Component: Metrics Grid (Modern Style) ---------- */
+function MetricsGrid({ device }: { device: NormalizedDevice }) {
+    const metrics: MetricDefinition[] = [
+        { key: 'edgeTemp', label: '核心温度', icon: Icon.Thermometer, unit: '°C' },
+        { key: 'hotspotTemp', label: '热点温度', icon: Icon.ThermometerSun, unit: '°C' },
+        { key: 'memTemp', label: '显存温度', icon: Icon.MemoryStick, unit: '°C' },
+        { key: 'power', label: '功耗', icon: Icon.Zap, unit: 'W', precision: 1 },
+        { key: 'gpuUtil', label: 'GPU 利用率', icon: Icon.Activity, unit: '%' },
+        { key: 'vramUtil', label: '显存利用率', icon: Icon.PieChart, unit: '%' },
+        { key: 'vramUsed', label: '显存占用', icon: Icon.Database, unit: 'MB', precision: 0 },
+        { key: 'fanRpm', label: '风扇转速', icon: Icon.Wind, unit: 'RPM' },
+        { key: 'sclk', label: '核心频率', icon: Icon.Cpu, unit: 'MHz' },
+        { key: 'mclk', label: '显存频率', icon: Icon.MemoryStick, unit: 'MHz' },
+        { key: 'powerCap', label: '功耗上限', icon: Icon.Power, unit: 'W' },
+        { key: 'vramVendor', label: '显存厂商', icon: Icon.Info },
+    ];
+
+    const formatValue = (metric: MetricDefinition) => {
+        const rawValue = device[metric.key];
+        if (rawValue === null || rawValue === undefined) return null;
+
+        // 特殊处理 vramUsed，保留数值形式的 vramUtil 以便显示进度条
+        if (metric.key === 'vramUsed' && device.vramTotal !== null) {
+            const used = Math.round(device.vramUsed ?? 0);
+            const total = Math.round(device.vramTotal);
+            const util = device.vramUtil !== null ? ` (${device.vramUtil}%)` : '';
+            if (total > 0) {
+                return `${used} / ${total} MB${util}`;
+            } else {
+                return `${used} / ${total} MB`;
+            }
+        }
+
+        if (typeof rawValue === 'number') {
+            return metric.precision !== undefined 
+                ? parseFloat(rawValue.toFixed(metric.precision)) // 保持数值类型
+                : rawValue; // 直接返回数值
+        }
+        
+        return String(rawValue);
+    }
+
+    return (
+        <motion.div 
+            className="w-full max-w-7xl mx-auto pt-24 pb-6 px-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.5 }}
+        >
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                {metrics.map((metric) => {
+                    const formattedValue = formatValue(metric);
+                    // 只为显存占用特殊处理单位
+                    const unit = metric.key === 'vramUsed' ? undefined : metric.unit;
+
+                    return (
+                        <MetricCard
+                            key={metric.key}
+                            icon={metric.icon}
+                            label={metric.label}
+                            value={formattedValue}
+                            unit={unit}
+                        />
+                    )
+                })}
+            </div>
         </motion.div>
     )
 }
@@ -101,139 +338,108 @@ function TopControls({
     const selectedDevice = normalize(devices[selectedIndex]);
     const deviceCount = devices.length;
     const kind = selectedDevice.kind;
-    const kindBadgeClass = 'bg-gray-100 text-gray-700 ring-1 ring-inset ring-gray-200';
 
     return (
-        <div className="absolute top-0 left-0 right-0 h-16 px-4 bg-white border-b border-gray-200 flex items-center justify-between z-10">
-            <div className="flex items-center gap-3">
-                <button
-                    onClick={onPrev}
-                    disabled={deviceCount <= 1}
-                    className="rounded-full bg-white border border-gray-300 p-2 text-gray-500 hover:bg-gray-100 hover:border-gray-400 hover:text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                    aria-label="Previous GPU"
-                >
-                    <Icon.ChevronLeft className="h-5 w-5" />
-                </button>
-                <div className="flex flex-col items-start">
-                    <h1 className="text-base font-semibold text-gray-900 flex items-center gap-2">
-                        {selectedDevice.name}
+        <motion.div 
+            className="absolute top-0 left-0 right-0 h-20 px-6 bg-white/95 backdrop-blur-sm flex items-center justify-between z-10 shadow-sm"
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, type: 'spring', stiffness: 100 }}
+        >
+            <div className="flex items-center gap-4">
+                <div className="flex gap-2">
+                    <motion.button
+                        onClick={onPrev}
+                        disabled={deviceCount <= 1}
+                        className="rounded-full bg-white/80 shadow-sm p-2.5 text-gray-600 hover:bg-gray-50 hover:text-gray-900 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                        aria-label="Previous GPU"
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        transition={{ type: 'spring', stiffness: 400, damping: 17 }}
+                    >
+                        <Icon.ChevronLeft className="h-5 w-5" />
+                    </motion.button>
+                    <motion.button
+                        onClick={onNext}
+                        disabled={deviceCount <= 1}
+                        className="rounded-full bg-white/80 shadow-sm p-2.5 text-gray-600 hover:bg-gray-50 hover:text-gray-900 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                        aria-label="Next GPU"
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        transition={{ type: 'spring', stiffness: 400, damping: 17 }}
+                    >
+                        <Icon.ChevronRight className="h-5 w-5" />
+                    </motion.button>
+                </div>
+                
+                <div className="flex flex-col items-start pl-1">
+                    <div className="flex items-center gap-2">
+                        <h1 className="text-lg font-medium text-gray-900">
+                            {selectedDevice.name}
+                        </h1>
                         {kind && (
-                            <span className={`ml-1 rounded px-1.5 py-0.5 text-xs font-medium ${kindBadgeClass}`}>
+                            <span className="px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-700 rounded-full">
                                 {kind}
                             </span>
                         )}
-                    </h1>
-                    <span className="text-xs text-gray-500">
+                    </div>
+                    <span className="text-sm text-gray-500 mt-0.5">
                         GPU {selectedIndex + 1} / {deviceCount}
-                        {selectedDevice.subsystem && ` | ${selectedDevice.subsystem}`}
+                        {selectedDevice.subsystem && ` · ${selectedDevice.subsystem}`}
                     </span>
                 </div>
-                <button
-                    onClick={onNext}
-                    disabled={deviceCount <= 1}
-                    className="rounded-full bg-white border border-gray-300 p-2 text-gray-500 hover:bg-gray-100 hover:border-gray-400 hover:text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                    aria-label="Next GPU"
-                >
-                    <Icon.ChevronRight className="h-5 w-5" />
-                </button>
             </div>
-            <div className="flex items-center gap-4">
+            
+            <div className="flex items-center gap-5">
                 <div className="relative">
                     <select
                         value={selectedIndex}
                         onChange={(e) => onSelect(parseInt(e.target.value, 10))}
                         disabled={deviceCount <= 1}
                         className="
-                            appearance-none rounded border border-gray-300 bg-white py-1 pl-3 pr-8
-                            text-sm text-gray-900 focus:border-gray-400 focus:ring-1 focus:ring-gray-400/50 focus:outline-none
-                            disabled:opacity-50 disabled:cursor-not-allowed
+                            appearance-none rounded-lg bg-white/80 shadow-sm py-2 pl-4 pr-10
+                            text-sm text-gray-700 hover:text-gray-900 cursor-pointer 
+                            focus:ring-2 focus:ring-gray-200 focus:outline-none
+                            disabled:opacity-40 disabled:cursor-not-allowed
+                            transition-all duration-200
                         "
                         aria-label="Select GPU"
                     >
                         {devices.map((d, i) => (
-                            <option key={i} value={i} className="text-gray-900">
+                            <option key={i} value={i} className="text-gray-800 py-1">
                                 {normalize(d).name ?? `Device ${i + 1}`}
                             </option>
                         ))}
                     </select>
-                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-400">
+                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500">
                         <Icon.ChevronDown className="h-4 w-4" />
                     </div>
                 </div>
+                
                 {rocmVer && (
-                    <div className="hidden sm:block text-xs text-gray-500 text-right leading-tight">
-                        ROCm-SMI {rocmVer.smi}<br />LIB {rocmVer.lib}
-                    </div>
+                    <motion.div 
+                        className="hidden sm:flex flex-col items-end"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ delay: 0.3 }}
+                    >
+                        <span className="text-sm font-medium text-gray-700">ROCm</span>
+                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                            <span>SMI {rocmVer.smi}</span>
+                            <span className="h-3 w-px bg-gray-300"></span>
+                            <span>LIB {rocmVer.lib}</span>
+                        </div>
+                    </motion.div>
                 )}
             </div>
-        </div>
+        </motion.div>
     )
 }
-
-/* ---------- UI Component: Metrics Grid (Monochrome Style) ---------- */
-function MetricsGrid({ device }: { device: NormalizedDevice }) {
-    const metrics: MetricDefinition[] = [
-        { key: 'edgeTemp', label: '核心温度', icon: Icon.Thermometer, unit: '°C' },
-        { key: 'hotspotTemp', label: '热点温度', icon: Icon.ThermometerSun, unit: '°C' },
-        { key: 'memTemp', label: '显存温度', icon: Icon.MemoryStick, unit: '°C' },
-        { key: 'power', label: '功耗', icon: Icon.Zap, unit: 'W', precision: 1 },
-        { key: 'gpuUtil', label: 'GPU 利用率', icon: Icon.Activity, unit: '%' },
-        { key: 'vramUsed', label: '显存占用', icon: Icon.Database, unit: 'MB', precision: 0 },
-        { key: 'fanRpm', label: '风扇转速', icon: Icon.Wind, unit: 'RPM' },
-        { key: 'sclk', label: '核心频率', icon: Icon.Cpu, unit: 'MHz' },
-        { key: 'mclk', label: '显存频率', icon: Icon.MemoryStick, unit: 'MHz' },
-        { key: 'powerCap', label: '功耗上限', icon: Icon.Power, unit: 'W' },
-        { key: 'vramVendor', label: '显存厂商', icon: Icon.Info },
-        { key: 'gfx', label: 'GFX 版本', icon: Icon.Info }
-    ];
-
-    const formatValue = (metric: MetricDefinition) => {
-        const rawValue = device[metric.key];
-        if (rawValue === null || rawValue === undefined) return null;
-
-        if (metric.key === 'vramUsed' && device.vramTotal !== null) {
-            const used = Math.round(device.vramUsed ?? 0);
-            const total = Math.round(device.vramTotal);
-            const util = device.vramUtil !== null ? ` (${device.vramUtil}%)` : '';
-            if (total > 0) {
-                return `${used} / ${total} MB${util}`;
-            } else {
-                return `${used} / ${total} MB`;
-            }
-        }
-
-        if (typeof rawValue === 'number') {
-            return metric.precision !== undefined ? rawValue.toFixed(metric.precision) : rawValue.toString();
-        }
-        return String(rawValue);
-    }
-
-    return (
-        <div className="w-full max-w-7xl mx-auto pt-20 pb-6 px-4">
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                {metrics.map((metric) => {
-                    const formattedValue = formatValue(metric);
-                    const unit = metric.key === 'vramUsed' ? undefined : metric.unit;
-
-                    return (
-                        <MetricCard
-                            key={metric.key}
-                            icon={metric.icon}
-                            label={metric.label}
-                            value={formattedValue}
-                            unit={unit}
-                        />
-                    )
-                })}
-            </div>
-        </div>
-    )
-}
-
 
 /* ---------- Main Page Component (Monochrome Style) ---------- */
 export default function Home() {
     const [snapshot, setSnapshot] = useState<RawDevice[] | null>(null)
+    const [procs, setProcs]       = useState<RocmPid[]>([])            // ★ 新增
     const [rocmVer, setRocmVer] = useState<RocmVer | null>(null)
     const [error, setError] = useState<string | null>(null)
     const [selectedDeviceIndex, setSelectedDeviceIndex] = useState<number>(0)
@@ -258,6 +464,7 @@ export default function Home() {
     useEffect(() => {
         console.log("Effect Hook: Mounting - Setting up listener & checking ROCm.");
         let unlistenGpu: (() => void) | null = null;
+        let unlistenPid: (() => void) | null = null;
 
         listen<RawDevice[]>('gpu-update', ({ payload }) => {
             // Update snapshot state based on incoming payload
@@ -305,6 +512,14 @@ export default function Home() {
                 setSelectedDeviceIndex(0);
             });
 
+        /* ---------- ★ 进程监听 ---------- */
+        listen<RocmPid[]>('gpu-pids-update', ({ payload }) => {
+            if (Array.isArray(payload)) setProcs(payload)
+        }).then(fn => (unlistenPid = fn))
+          .catch(err => {
+                console.error("Effect Hook: Failed to listen for gpu-pids-update:", err);
+          });
+
         // Fetch ROCm version
         invoke<{ version?: { 'ROCM-SMI version': string; 'ROCM-SMI-LIB version': string } }>('check_rocm_smi')
             .then(res => {
@@ -326,6 +541,10 @@ export default function Home() {
             if (unlistenGpu) {
                 unlistenGpu(); // Detach the listener
                 console.log("Effect Hook: Listener detached.");
+            }
+            if (unlistenPid) {
+                unlistenPid(); // Detach the pid listener
+                console.log("Effect Hook: PID Listener detached.");
             }
         };
     }, []); // <-- **Correct**: Empty array `[]` ensures this effect runs only on mount/unmount
@@ -386,6 +605,7 @@ export default function Home() {
                     rocmVer={rocmVer}
                 />
                 <MetricsGrid device={selectedDeviceData} />
+                <ProcessTable procs={procs} />      {/* ★ 插入这里 */}
             </>
         );
     };
