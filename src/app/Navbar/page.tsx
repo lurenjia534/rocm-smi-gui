@@ -56,12 +56,11 @@ export default function Sidebar() {
     ];
 
     // memoized active index
-    const activeIndex = useMemo(
+    useMemo(
         () => navItems.findIndex((n) => pathname === n.href || pathname.startsWith(n.href)),
         [pathname, navItems]
     );
-
-    // grouped nav items
+// grouped nav items
     const grouped = useMemo(
         () => ({
             "指标": navItems.filter((n) => n.group === "指标"),

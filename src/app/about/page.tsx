@@ -6,11 +6,9 @@ import {
   Activity,
   AlertTriangle,
   ArrowRight,
-  Code,
   Command,
   ExternalLink,
   Github,
-  Globe,
   Layers,
   Thermometer
 } from 'lucide-react'
@@ -116,8 +114,7 @@ const TechItem = ({
 )
 
 export default function AboutPage() {
-  const pathname = usePathname()
-  
+  usePathname();
   return (
     <main className="min-h-screen bg-gray-50 pb-24 md:pl-24">
       {/* 顶部标题区域 */}
