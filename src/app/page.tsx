@@ -746,7 +746,6 @@ function TopControls({
     
     // 获取当前设备的其他关键信息
     const gfxVersion = selectedDevice.gfx;
-    const vendor = selectedDevice.vendor;
     
     // GPU类型图标
     const renderDeviceIcon = () => {
@@ -959,8 +958,7 @@ const LoadingBackground = () => {
     // 预生成固定的随机参数避免每次渲染变化
     const generateFixedRandomParams = () => {
         const items = [];
-        for (let i = 0; i < 12; i++) {
-            const seed = i * 0.1; // 使用固定种子
+        for (let i = 0; i < 12; i++) {// 使用固定种子
             items.push({
                 initialX: 50 * i + 20,
                 initialY: 30 * i + 10,
