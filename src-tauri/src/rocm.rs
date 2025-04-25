@@ -18,8 +18,8 @@ where
 {
     let v: Option<serde_json::Value> = Option::deserialize(d)?;
     Ok(match v {
-        Some(serde_json::Value::Number(n)) => n.as_f64(),
-        Some(serde_json::Value::String(s)) => f64::from_str(&s).ok(),
+        Some(Value::Number(n)) => n.as_f64(),
+        Some(Value::String(s)) => f64::from_str(&s).ok(),
         _ => None,
     })
 }
