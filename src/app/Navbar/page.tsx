@@ -48,7 +48,7 @@ export default function Sidebar() {
 
     // nav definitions
     const navItems: NavItemMeta[] = [
-        { name: "概览", href: "/overview", icon: Home, group: "指标" },
+        { name: "概览", href: "/", icon: Home, group: "指标" },
         { name: "使用率和显存", href: "/utilization", icon: Gauge, group: "指标" },
         { name: "温度监控", href: "/temperature", icon: Thermometer, group: "指标" },
         { name: "功耗与频率", href: "/power", icon: Activity, group: "指标" },
