@@ -168,7 +168,7 @@ fn locate_rocm_smi() -> Option<PathBuf> {
     which("rocm-smi").ok()
 }
 
-/// 调用 'rocm-sim --version --josn' 命令 并解析
+/// 调用 'rocm-smi --version --json' 命令并解析
 async fn query_rocm_version(path: &PathBuf) -> anyhow::Result<RocmVersion> {
     let output = Command::new(path)
         .args(["--version", "--json"])
