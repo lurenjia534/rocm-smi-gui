@@ -275,7 +275,7 @@ function GlassAreaChart({ data, title }: { data: ChartPoint[]; title: string }) 
                             </defs>
                             <CartesianGrid strokeDasharray="3 3" stroke="#4B5563" strokeOpacity={0.1} />
                             <XAxis dataKey="name" stroke="#6B7280" tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: '#6B7280' }} />
-                            <YAxis stroke="#6B7280" tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: '#6B7280' }} width={40} />
+                            <YAxis stroke="#6B7280" tickLine={false} axisLine={false} tick={{ fontSize: 12, fill: '#6B7280' }} width={40} domain={[0, 100]} />
                             <Tooltip
                                 cursor={{ stroke: '#9CA3AF', strokeWidth: 1, strokeDasharray: '3 3' }}
                                 contentStyle={{
