@@ -153,14 +153,14 @@ function MetricCard({
 
     return (
         <motion.div
-            className="w-full rounded-xl overflow-hidden backdrop-blur-sm"
+            className="w-full rounded-xl overflow-hidden backdrop-blur-lg"
             whileHover={{
                 scale: 1.03,
-                boxShadow: '0 8px 24px rgba(0,0,0,0.08)',
+                boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
             }}
             transition={{ type: 'spring', stiffness: 400, damping: 17 }}
         >
-            <div className="bg-white/90 shadow-md h-full p-5">
+            <div className="bg-white/5 shadow-md h-full p-5 border border-white/10 rounded-xl">
                 {/* 卡片顶部：指标标签和图标 */}
                 <div className="flex items-center justify-between mb-3">
                     <span className="text-sm font-medium text-gray-500">
@@ -168,8 +168,8 @@ function MetricCard({
                     </span>
                     <motion.div
                         className={`rounded-full p-2 ${
-                            isHighValue ? 'bg-gray-100' : 
-                            isMediumValue ? 'bg-gray-50' : 'bg-gray-50'
+                            isHighValue ? 'bg-gray-500/10 border border-white/5' : 
+                            isMediumValue ? 'bg-gray-500/5 border border-white/5' : 'bg-gray-500/5 border border-white/5'
                         }`}
                         whileHover={{ scale: 1.1, rotate: 5 }}
                         transition={{ type: 'spring', stiffness: 300, damping: 10 }}
@@ -367,46 +367,110 @@ export default function UtilizationPage() {
     const [gpuHistory, setGpuHistory] = useState<ChartPoint[]>([]);
     const [vramHistory, setVramHistory] = useState<ChartPoint[]>([]);
 
+    // 从localStorage读取选中的显卡索引
+    useEffect(() => {
+        try {
+            const savedIndex = localStorage.getItem('selectedGpuIndex');
+            if (savedIndex !== null) {
+                const parsedIndex = parseInt(savedIndex, 10);
+                setSelectedDeviceIndex(parsedIndex);
+                console.log("从存储中恢复显卡选择:", parsedIndex);
+            }
+        } catch (err) {
+            console.error("无法从本地存储读取显卡选择:", err);
+        }
+    }, []);
+
+    // 当选中的显卡改变时，保存到localStorage
+    useEffect(() => {
+        try {
+            localStorage.setItem('selectedGpuIndex', selectedDeviceIndex.toString());
+            console.log("已保存显卡选择:", selectedDeviceIndex);
+        } catch (err) {
+            console.error("无法保存显卡选择到本地存储:", err);
+        }
+    }, [selectedDeviceIndex]);
+    
+    // 处理显卡切换
+    const handleDeviceChange = (index: number) => {
+        if (snapshot && index < snapshot.length) {
+            console.log(`切换显卡: 从 ${selectedDeviceIndex} 到 ${index}`);
+            
+            // 清空历史数据
+            setGpuHistory([]);
+            setVramHistory([]);
+            
+            // 更新选中的显卡索引
+            setSelectedDeviceIndex(index);
+            
+            // 立即使用当前数据更新图表，避免等待下一次事件
+            if (snapshot && snapshot.length > index) {
+                const device = normalize(snapshot[index]);
+                const label = new Date().toLocaleTimeString('zh-CN', { minute: '2-digit', second: '2-digit' });
+                
+                // 设置初始点
+                setGpuHistory([{ name: label, value: device.gpuUtil ?? 0 }]);
+                setVramHistory([{ name: label, value: device.vramUtil ?? 0 }]);
+                
+                console.log(`已初始化新图表数据 - GPU利用率: ${device.gpuUtil}, 显存利用率: ${device.vramUtil}`);
+            }
+        }
+    };
+
+    // 处理数据更新逻辑，与selectedDeviceIndex分离
+    const updateDeviceData = React.useCallback((payload: RawDevice[] | null) => {
+        if (payload && Array.isArray(payload) && payload.length > 0) {
+            const idx = Math.min(selectedDeviceIndex, payload.length - 1);
+            
+            // 只有当设备索引有效时才更新数据
+            if (idx >= 0 && idx < payload.length) {
+                const device = normalize(payload[idx]);
+                const label = new Date().toLocaleTimeString('zh-CN', { minute: '2-digit', second: '2-digit' });
+                console.log(`更新图表数据 - 显卡 ${idx}, GPU利用率: ${device.gpuUtil}, 显存利用率: ${device.vramUtil}`);
+                
+                setGpuHistory(prev => [...prev.slice(-19), { name: label, value: device.gpuUtil ?? 0 }]);
+                setVramHistory(prev => [...prev.slice(-19), { name: label, value: device.vramUtil ?? 0 }]);
+            }
+        }
+    }, [selectedDeviceIndex]);
+    
     // 设置监听器和初始化数据
     useEffect(() => {
-        console.log("设置GPU数据监听器");
+        console.log(`设置GPU数据监听器 (当前选中显卡: ${selectedDeviceIndex})`);
         let unlistenGpu: (() => void) | null = null;
-
+    
         listen<RawDevice[]>('gpu-update', ({ payload }) => {
             // 更新快照状态
             setSnapshot(prevSnapshot => {
                 if (payload && Array.isArray(payload)) {
                     const newLength = payload.length;
                     let newIndex = selectedDeviceIndex;
-
+    
                     // 如果索引无效，重置为0
                     if (selectedDeviceIndex >= newLength && newLength > 0) {
                         newIndex = 0;
                     } else if (newLength === 0) {
                         newIndex = 0;
                     }
-
+    
                     if (newIndex !== selectedDeviceIndex) {
                         setSelectedDeviceIndex(newIndex);
                     }
-
+    
                     setError(null);
+                    
+                    // 更新图表数据
+                    updateDeviceData(payload);
+                    
                     return payload;
                 } else if (payload === null || payload === undefined) {
                     setError(null);
                     setSelectedDeviceIndex(0);
                     return [];
                 }
-
+    
                 return prevSnapshot;
             });
-            if (payload && Array.isArray(payload) && payload.length > 0) {
-                const idx = Math.min(selectedDeviceIndex, payload.length - 1);
-                const device = normalize(payload[idx]);
-                const label = new Date().toLocaleTimeString('zh-CN', { minute: '2-digit', second: '2-digit' });
-                setGpuHistory(prev => [...prev.slice(-19), { name: label, value: device.gpuUtil ?? 0 }]);
-                setVramHistory(prev => [...prev.slice(-19), { name: label, value: device.vramUtil ?? 0 }]);
-            }
         })
         .then(fn => {
             console.log("GPU数据监听器已设置");
@@ -418,7 +482,7 @@ export default function UtilizationPage() {
             setSnapshot([]);
             setSelectedDeviceIndex(0);
         });
-
+    
         // 清理函数
         return () => {
             console.log("清理GPU数据监听器");
@@ -427,7 +491,7 @@ export default function UtilizationPage() {
                 console.log("GPU数据监听器已移除");
             }
         };
-    }, []);
+    }, [updateDeviceData]); // 只依赖updateDeviceData，它已经依赖了selectedDeviceIndex
 
     // 处理当前选中的设备数据
     const selectedDeviceData = React.useMemo(() => {
@@ -440,42 +504,191 @@ export default function UtilizationPage() {
     // 渲染错误状态
     const renderError = () => (
         <motion.div
-            className="p-6 bg-red-50 text-red-600 rounded-xl shadow-sm border border-red-100"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3 }}
+            className="p-8 rounded-3xl shadow-md backdrop-blur-lg border border-red-200/20 bg-gradient-to-br from-red-50/80 to-red-50/60"
+            initial={{ opacity: 0, y: 15, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ type: "spring", stiffness: 100, damping: 15 }}
         >
-            <div className="flex items-center gap-3 mb-2">
-                <Icon.AlertCircle className="h-6 w-6 text-red-500" />
-                <h3 className="font-medium text-lg">连接错误</h3>
+            <div className="flex items-center gap-4 mb-3">
+                <motion.div
+                    className="flex items-center justify-center w-12 h-12 rounded-xl bg-red-100/80 text-red-500 border border-red-200/50"
+                    initial={{ rotate: -10, scale: 0.9 }}
+                    animate={{ rotate: 0, scale: 1 }}
+                    transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
+                >
+                    <Icon.AlertCircle className="h-7 w-7" />
+                </motion.div>
+                <motion.h3 
+                    className="font-semibold text-xl text-red-700"
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.15, duration: 0.4 }}
+                >
+                    连接错误
+                </motion.h3>
             </div>
-            <p className="ml-9 text-red-700">{error}</p>
-            <button
-                className="mt-4 ml-9 px-4 py-2 bg-red-100 hover:bg-red-200 rounded-lg text-red-700 font-medium transition-colors"
-                onClick={() => window.location.reload()}
+            
+            <motion.p 
+                className="ml-16 text-red-700/90 mb-5"
+                initial={{ opacity: 0, y: 5 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3, duration: 0.4 }}
             >
-                重新加载
-            </button>
+                {error}
+            </motion.p>
+            
+            <motion.div
+                className="ml-16"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.4, duration: 0.4 }}
+            >
+                <motion.button
+                    className="px-5 py-2.5 bg-red-100/80 hover:bg-red-200/90 rounded-xl text-red-700 font-medium transition-all border border-red-200/30 shadow-sm flex items-center gap-2"
+                    onClick={() => window.location.reload()}
+                    whileHover={{ scale: 1.03, x: 3 }}
+                    whileTap={{ scale: 0.97 }}
+                >
+                    <Icon.RefreshCw className="w-4 h-4" />
+                    <span>重新加载</span>
+                </motion.button>
+            </motion.div>
         </motion.div>
     );
 
     // 渲染加载状态
     const renderLoading = () => (
         <motion.div
-            className="p-8 bg-white rounded-xl shadow-sm flex items-center justify-center min-h-[300px]"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.5 }}
+            className="p-10 rounded-3xl border border-white/10 bg-white/5 backdrop-blur-lg shadow-[0_6px_20px_rgba(0,0,0,0.10)] flex items-center justify-center min-h-[300px]"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ 
+                opacity: 1, 
+                y: 0,
+                transition: {
+                    type: "spring",
+                    stiffness: 90,
+                    damping: 15
+                }
+            }}
         >
             <div className="text-center">
-                <div className="relative">
-                    <Icon.Loader className="h-10 w-10 text-gray-300 animate-spin mb-4 mx-auto" />
-                    <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="h-6 w-6 rounded-full bg-white"></div>
-                    </div>
-                </div>
-                <p className="text-gray-500 text-lg">正在加载 GPU 数据...</p>
-                <p className="text-gray-400 text-sm mt-1">请稍候，正在收集系统信息</p>
+                {/* 加载动画容器 */}
+                <motion.div 
+                    className="relative w-20 h-20 mx-auto mb-6"
+                    initial={{ rotate: 0 }}
+                    animate={{ 
+                        rotate: 360,
+                        transition: { 
+                            duration: 20, 
+                            ease: "linear", 
+                            repeat: Infinity 
+                        }
+                    }}
+                >
+                    {/* 轨道背景 */}
+                    <div className="absolute inset-0 rounded-full border-4 border-gray-200/30 backdrop-blur-sm"></div>
+                    
+                    {/* 外圈 */}
+                    <motion.div 
+                        className="absolute inset-0 rounded-full border-4 border-t-indigo-400 border-r-transparent border-b-transparent border-l-transparent"
+                        initial={{ rotate: 0 }}
+                        animate={{ 
+                            rotate: 360,
+                            transition: { 
+                                duration: 1.5, 
+                                ease: "linear", 
+                                repeat: Infinity 
+                            }
+                        }}
+                    ></motion.div>
+                    
+                    {/* 中圈 */}
+                    <motion.div 
+                        className="absolute inset-2 rounded-full border-4 border-r-blue-400 border-t-transparent border-b-transparent border-l-transparent"
+                        initial={{ rotate: 0 }}
+                        animate={{ 
+                            rotate: -360,
+                            transition: { 
+                                duration: 3, 
+                                ease: "linear", 
+                                repeat: Infinity 
+                            }
+                        }}
+                    ></motion.div>
+                    
+                    {/* 内圈 */}
+                    <motion.div 
+                        className="absolute inset-4 rounded-full border-4 border-b-cyan-400 border-t-transparent border-r-transparent border-l-transparent"
+                        initial={{ rotate: 0 }}
+                        animate={{ 
+                            rotate: 480,
+                            transition: { 
+                                duration: 2, 
+                                ease: "linear", 
+                                repeat: Infinity 
+                            }
+                        }}
+                    ></motion.div>
+                    
+                    {/* 中心点 */}
+                    <motion.div 
+                        className="absolute inset-0 flex items-center justify-center"
+                        animate={{ 
+                            scale: [0.8, 1.1, 0.8],
+                            opacity: [0.7, 1, 0.7],
+                            transition: { 
+                                duration: 2,
+                                ease: "easeInOut", 
+                                repeat: Infinity,
+                            }
+                        }}
+                    >
+                        <div className="h-4 w-4 rounded-full bg-indigo-400 shadow-[0_0_10px_rgba(129,140,248,0.6)]"></div>
+                    </motion.div>
+                </motion.div>
+                
+                {/* 加载文字 */}
+                <motion.p 
+                    className="text-gray-600 text-lg font-medium mb-1"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ 
+                        opacity: 1, 
+                        y: 0,
+                        transition: {
+                            delay: 0.2,
+                            duration: 0.5
+                        }
+                    }}
+                >
+                    正在加载 GPU 数据...
+                </motion.p>
+                
+                <motion.p 
+                    className="text-gray-400 text-sm"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ 
+                        opacity: 1, 
+                        y: 0,
+                        transition: {
+                            delay: 0.4,
+                            duration: 0.5
+                        }
+                    }}
+                >
+                    <span>请稍候，正在收集系统信息</span>
+                    <motion.span
+                        animate={{
+                            opacity: [0, 1, 0],
+                            transition: {
+                                duration: 1.5,
+                                repeat: Infinity,
+                                ease: "easeInOut"
+                            }
+                        }}
+                    >
+                        ...
+                    </motion.span>
+                </motion.p>
             </div>
         </motion.div>
     );
@@ -483,22 +696,82 @@ export default function UtilizationPage() {
     // 渲染无设备状态
     const renderNoDevices = () => (
         <motion.div
-            className="p-8 bg-white rounded-xl shadow-sm text-center min-h-[300px] flex flex-col items-center justify-center"
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.4 }}
+            className="p-10 rounded-3xl border border-white/10 bg-white/5 backdrop-blur-lg shadow-[0_6px_20px_rgba(0,0,0,0.10)] text-center min-h-[300px] flex flex-col items-center justify-center"
+            initial={{ opacity: 0, scale: 0.95, y: 15 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            transition={{ type: "spring", stiffness: 80, damping: 15 }}
         >
-            <div className="bg-amber-50 p-3 rounded-full mb-4">
-                <Icon.AlertCircle className="h-8 w-8 text-amber-500" />
-            </div>
-            <h3 className="font-medium text-lg mb-2">未检测到 GPU 设备</h3>
-            <p className="text-gray-500 max-w-md mx-auto">未找到支持的 AMD GPU 设备，请确认驱动已正确安装</p>
-            <button
-                className="mt-4 px-4 py-2 bg-amber-50 hover:bg-amber-100 rounded-lg text-amber-700 font-medium transition-colors"
-                onClick={() => window.location.reload()}
+            <motion.div 
+                className="relative mb-6"
+                initial={{ y: -10, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
             >
-                重新检测
-            </button>
+                <div className="w-20 h-20 rounded-full bg-gradient-to-br from-amber-100/50 to-amber-50/30 backdrop-blur-sm flex items-center justify-center border border-amber-200/30">
+                    <Icon.AlertCircle className="h-10 w-10 text-amber-500" />
+                </div>
+                
+                {/* 装饰元素 */}
+                <motion.div 
+                    className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-amber-200/40 backdrop-blur-sm border border-amber-300/30"
+                    animate={{
+                        y: [0, -8, 0],
+                        opacity: [0.7, 1, 0.7],
+                        scale: [0.9, 1.1, 0.9]
+                    }}
+                    transition={{
+                        duration: 3,
+                        repeat: Infinity,
+                        ease: "easeInOut"
+                    }}
+                />
+                <motion.div 
+                    className="absolute -bottom-1 -left-3 w-4 h-4 rounded-full bg-amber-300/40 backdrop-blur-sm border border-amber-400/30"
+                    animate={{
+                        y: [0, 6, 0],
+                        x: [0, -3, 0],
+                        opacity: [0.6, 0.9, 0.6],
+                        scale: [0.8, 1, 0.8]
+                    }}
+                    transition={{
+                        duration: 2.5,
+                        repeat: Infinity,
+                        ease: "easeInOut",
+                        delay: 0.5
+                    }}
+                />
+            </motion.div>
+            
+            <motion.h3 
+                className="font-semibold text-xl text-gray-800 mb-3"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3, duration: 0.5 }}
+            >
+                未检测到 GPU 设备
+            </motion.h3>
+            
+            <motion.p 
+                className="text-gray-500 max-w-md mx-auto mb-6"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.4, duration: 0.5 }}
+            >
+                未找到支持的 AMD GPU 设备，请确认驱动已正确安装
+            </motion.p>
+            
+            <motion.button
+                className="px-5 py-2.5 bg-gradient-to-r from-amber-50/80 to-amber-100/80 hover:from-amber-100/90 hover:to-amber-200/90 rounded-xl text-amber-700 font-medium transition-all border border-amber-200/30 shadow-sm flex items-center gap-2"
+                onClick={() => window.location.reload()}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.5, duration: 0.5 }}
+                whileHover={{ scale: 1.03, x: 3 }}
+                whileTap={{ scale: 0.97 }}
+            >
+                <Icon.RefreshCw className="w-4 h-4" />
+                <span>重新检测</span>
+            </motion.button>
         </motion.div>
     );
 
@@ -511,25 +784,124 @@ export default function UtilizationPage() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.1, duration: 0.4 }}
             >
-                <div className="bg-white rounded-xl shadow-sm p-4 mb-2">
-                    <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center">
-                            <div className="bg-gray-50 p-2 rounded-lg mr-3">
-                                <Icon.Cpu className="w-5 h-5 text-gray-600" />
-                            </div>
-                            <h2 className="text-lg font-medium text-gray-800">设备信息</h2>
-                        </div>
-                        {snapshot && snapshot.length > 0 && (
-                            <div className="flex items-center gap-2 bg-gray-50 py-1.5 px-3 rounded-lg">
-                                <span className="text-sm text-gray-500">
-                                    {selectedDeviceData.name}
-                                </span>
-                                <div className="flex h-4 w-4 items-center justify-center rounded-full bg-green-100">
-                                    <div className="h-2 w-2 rounded-full bg-green-500"></div>
-                                </div>
-                            </div>
-                        )}
-                    </div>
+                           <div className="rounded-3xl border border-white/10 bg-white/5 backdrop-blur-lg shadow-[0_6px_20px_rgba(0,0,0,0.10)] overflow-hidden p-7 mb-6">
+                               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                                   {/* 左侧：标题和GPU信息 */}
+                                   <div className="flex items-start">
+                                       <div className="bg-gradient-to-br from-indigo-400/10 to-blue-400/10 p-3 rounded-xl mr-4 shadow-sm backdrop-blur-sm border border-white/10">
+                                           <Icon.Cpu className="w-6 h-6 text-indigo-500" />
+                                       </div>
+                                       <div>
+                                           <h2 className="text-xl font-semibold text-gray-800 mb-1 tracking-tight select-none">设备信息</h2>
+                                           {snapshot && snapshot.length > 0 && (
+                                               <p className="text-sm text-gray-500">{selectedDeviceData.vendor || '未知厂商'}</p>
+                                           )}
+                                       </div>
+                                   </div>
+                                   
+                                   {/* 显卡选择器 */}
+                                   {snapshot && snapshot.length > 1 && (
+                                       <div className="flex items-center gap-3">
+                                           <span className="text-sm text-gray-500">选择显卡:</span>
+                                           <div className="flex gap-2">
+                                               {snapshot.map((device, index) => {
+                                                   const deviceName = device['Device Name'] as string ?? `GPU ${index}`;
+                                                   const shortName = deviceName.length > 12 
+                                                       ? deviceName.substring(0, 12) + '...' 
+                                                       : deviceName;
+                                                   
+                                                   return (
+                                                       <motion.button
+                                                           key={index}
+                                                           className={`px-3 py-2 rounded-lg text-sm font-medium transition-all backdrop-blur-sm
+                                                               ${index === selectedDeviceIndex 
+                                                                   ? 'bg-indigo-500/10 text-indigo-600 border border-indigo-200/20 shadow-md' 
+                                                                   : 'bg-gray-500/5 text-gray-600 border border-white/10 hover:bg-gray-500/10'
+                                                               }`}
+                                                           onClick={() => handleDeviceChange(index)}
+                                                           whileHover={{ scale: 1.03 }}
+                                                           whileTap={{ scale: 0.98 }}
+                                                       >
+                                                           <div className="flex items-center gap-1.5">
+                                                               <Icon.Monitor className="w-3.5 h-3.5" />
+                                                               <span>{index === 0 ? '显卡 0' : '显卡 1'}</span>
+                                                           </div>
+                                                           <div className="text-xs opacity-75 mt-0.5 text-left">
+                                                               {shortName}
+                                                           </div>
+                                                       </motion.button>
+                                                   );
+                                               })}
+                                           </div>
+                                       </div>
+                                   )}
+                                   
+                                   {/* 右侧：设备状态和详情 */}
+                                   {snapshot && snapshot.length > 0 && (
+                                       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mt-2 md:mt-0">
+                                           {/* 设备类型指示 */}
+                                           <div className="flex items-center px-3 py-2 bg-gray-500/5 rounded-lg backdrop-blur-sm border border-white/10 shadow-sm">
+                                               <Icon.Layers className="w-4 h-4 text-gray-500 mr-2" />
+                                               <span className="text-sm font-medium text-gray-600">
+                                                   {selectedDeviceData.kind === 'Discrete' ? '独立显卡' : 
+                                                    selectedDeviceData.kind === 'Integrated' ? '集成显卡' : 'GPU设备'}
+                                               </span>
+                                           </div>
+                                           
+                                           {/* 设备状态和名称 */}
+                                           <div className="flex items-center gap-2 bg-gradient-to-r from-gray-500/5 to-gray-600/5 py-2 px-4 rounded-lg border border-white/10 shadow-sm backdrop-blur-sm">
+                                               <div className="flex h-3.5 w-3.5 items-center justify-center">
+                                                   <div className="h-2.5 w-2.5 rounded-full bg-green-500 animate-pulse"></div>
+                                               </div>
+                                               <span className="text-sm font-medium text-gray-700">
+                                                   {selectedDeviceData.name}
+                                               </span>
+                                           </div>
+                                       </div>
+                                   )}
+                               </div>
+                               
+                               {/* 详细信息部分 */}
+                               {snapshot && snapshot.length > 0 && (
+                                   <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t border-white/10">
+                                       {/* GFX版本 */}
+                                       <div className="flex items-center bg-gray-500/5 rounded-xl p-3 backdrop-blur-sm border border-white/5">
+                                           <div className="w-10 h-10 rounded-full bg-blue-400/10 flex items-center justify-center mr-3 border border-blue-400/10 shadow-inner">
+                                               <Icon.Database className="w-5 h-5 text-blue-500" />
+                                           </div>
+                                           <div>
+                                               <p className="text-xs text-gray-500 font-medium">GFX版本</p>
+                                               <p className="text-sm font-semibold text-gray-700">{selectedDeviceData.gfx || '未知'}</p>
+                                           </div>
+                                       </div>
+                                       
+                                       {/* 显存大小 */}
+                                       <div className="flex items-center bg-gray-500/5 rounded-xl p-3 backdrop-blur-sm border border-white/5">
+                                           <div className="w-10 h-10 rounded-full bg-indigo-400/10 flex items-center justify-center mr-3 border border-indigo-400/10 shadow-inner">
+                                               <Icon.Database className="w-5 h-5 text-indigo-500" />
+                                           </div>
+                                           <div>
+                                               <p className="text-xs text-gray-500 font-medium">显存容量</p>
+                                               <p className="text-sm font-semibold text-gray-700">
+                                                   {selectedDeviceData.vramTotal ? `${selectedDeviceData.vramTotal.toFixed(0)} MB` : '未知'}
+                                               </p>
+                                           </div>
+                                       </div>
+                                       
+                                       {/* 功耗上限 */}
+                                       <div className="flex items-center bg-gray-500/5 rounded-xl p-3 backdrop-blur-sm border border-white/5">
+                                           <div className="w-10 h-10 rounded-full bg-emerald-400/10 flex items-center justify-center mr-3 border border-emerald-400/10 shadow-inner">
+                                               <Icon.Zap className="w-5 h-5 text-emerald-500" />
+                                           </div>
+                                           <div>
+                                               <p className="text-xs text-gray-500 font-medium">功耗上限</p>
+                                               <p className="text-sm font-semibold text-gray-700">
+                                                   {selectedDeviceData.powerCap ? `${selectedDeviceData.powerCap} W` : '未知'}
+                                               </p>
+                                           </div>
+                                       </div>
+                                   </div>
+                               )}
                 </div>
             </motion.div>
 
@@ -557,12 +929,12 @@ export default function UtilizationPage() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.4, duration: 0.4 }}
             >
-                <div className="bg-white rounded-xl shadow-sm p-6">
+                <div className="rounded-3xl border border-white/10 bg-white/5 backdrop-blur-lg shadow-[0_6px_20px_rgba(0,0,0,0.10)] p-7">
                     <div className="flex items-center mb-6">
-                        <div className="bg-gray-50 p-2 rounded-lg mr-3">
+                        <div className="bg-gradient-to-br from-gray-400/10 to-gray-500/10 p-3 rounded-xl mr-4 shadow-sm backdrop-blur-sm border border-white/10">
                             <Icon.Activity className="w-5 h-5 text-gray-600" />
                         </div>
-                        <h2 className="text-lg font-medium text-gray-800">实时性能指标</h2>
+                        <h2 className="text-lg font-semibold text-gray-800 tracking-tight select-none">实时性能指标</h2>
                     </div>
                     <PerformanceMetricsGrid device={selectedDeviceData} />
                 </div>
